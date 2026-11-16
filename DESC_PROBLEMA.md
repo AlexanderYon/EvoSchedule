@@ -66,7 +66,7 @@ Llamaremos $S$ al conjunto de todos los individuos $H$ posibles (el espacio de b
 
 ### Restricciones y Penalización
 
-Definimos una función de penalización $P : S \to \mathbb{R}^5$
+Definimos una función de penalización $P : S \to \mathbb{R}^4$
 
 $$
 P(H) = [P_{prof}, P_{asig}, P_{vent}, P_{sal}]
