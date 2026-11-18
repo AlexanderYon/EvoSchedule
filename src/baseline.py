@@ -1,172 +1,140 @@
 """
-Módulo de Algoritmos Baseline para EvoSchedule.
-Implementa generadores de horarios de referencia para establecer una cota base (baseline):
-1. RandomBaseline: Asignación puramente aleatoria de día, bloque y sala.
-2. GreedyBaseline: Asignación voraz heurística secuencial.
-Permite evaluar y reportar métricas estadísticas con fines comparativos contra el Algoritmo Genético.
+Módulo de Algoritmo Baseline para EvoSchedule.
+Implementa el Algoritmo Voraz (Greedy Baseline) como método de referencia base:
+- Algoritmo constructivo secuencial: asigna cada sesión (duración = 2 bloques)
+  en el mejor casillero disponible (día, bloque, sala) minimizando penalizaciones inmediatas.
+- Favorece la alternancia de días para sesiones de una misma asignatura (ej. Lunes y Miércoles).
+- Criterio de selección local: First-Fit / Best-Fit voraz.
+- Evaluación formal con el FitnessEvaluator del problema.
 """
 
-import random
-from typing import List, Dict, Any, Tuple
+import time
+from typing import List, Dict, Any
 from src.domain import Horario, Asignacion
 from src.fitness import FitnessEvaluator
 
 
-class BaselineGenerator:
-    def __init__(self, workload: List[Dict[str, Any]], available_rooms: List[str], total_blocks: int = 8, days: int = 5):
-        self.workload = workload
-        self.available_rooms = available_rooms
-        self.total_blocks = total_blocks
-        self.days = days
+class GreedyBaseline:
+    def __init__(self, asignaturas: List[Dict[str, Any]], salas: List[str], total_bloques: int = 16, dias: int = 5):
+        self.asignaturas = asignaturas
+        self.salas = salas
+        self.total_bloques = total_bloques
+        self.dias = dias
 
-    def generar_aleatorio(self, seed: int = None) -> Horario:
-        """Genera un individuo con asignación completamente aleatoria uniforme."""
-        if seed is not None:
-            random.seed(seed)
-
-        genes = []
-        for item in self.workload:
-            duracion = item["duracion"]
-            dia = random.randint(1, self.days)
-            bloque = random.randint(1, self.total_blocks - duracion + 1)
-            sala = random.choice(self.available_rooms)
-
-            genes.append(Asignacion(
-                sesion_id=item["sesion_id"],
-                asignatura=item["asignatura_nombre"],
-                profesor=item["docente"],
-                nivel=item["nivel"],
-                duracion=duracion,
-                dia=dia,
-                bloque=bloque,
-                sala=sala
-            ))
-
-        return Horario(genes=genes)
-
-    def generar_voraz(self, seed: int = None) -> Horario:
+    def ejecutar(self, evaluador: FitnessEvaluator) -> Dict[str, Any]:
         """
-        Genera un horario mediante heurística voraz (Greedy):
-        Intenta asignar cada sesión en la primera combinación (día, bloque, sala)
-        que minimice conflictos inmediatos con las clases ya asignadas.
+        Ejecuta el Algoritmo Voraz (Greedy Baseline) de forma determinista:
+        Para cada sesión, evalúa combinaciones posibles de (día, bloque, sala)
+        y selecciona vorazmente la primera que minimice los conflictos inmediatos.
         """
-        if seed is not None:
-            random.seed(seed)
-
+        t_start = time.time()
         genes: List[Asignacion] = []
-        for item in self.workload:
-            duracion = item["duracion"]
-            mejor_opcion = None
-            menor_choque = float('inf')
+        bloques_inicio = list(range(1, self.total_bloques, 2))  # Módulos estándar de 2 bloques (1, 3, 5, ..., 15)
 
-            # Mezclar opciones para evitar sesgos deterministas
-            dias = list(range(1, self.days + 1))
-            bloques = list(range(1, self.total_blocks - duracion + 1))
-            salas = list(self.available_rooms)
-            random.shuffle(dias)
-            random.shuffle(bloques)
-            random.shuffle(salas)
+        for asig in self.asignaturas:
+            duracion = asig.get("duracion", 2)
+            mejor_slot = None
+            menor_costo = float("inf")
 
-            # Probar opciones candidatas
-            for d in dias:
-                for b in bloques:
-                    for s in salas:
-                        choques = 0
+            # Identificar si ya existe una sesión previa de la misma asignatura
+            asig_base_id = asig.get("asig_id", asig["id"].split("_S")[0] if "_S" in asig["id"] else asig["id"])
+            dia_sesion_previa = None
+            for g in genes:
+                if g.id_asig.startswith(asig_base_id):
+                    dia_sesion_previa = g.dia
+                    break
+
+            # Orden de días: priorizar días distintos si ya hay una sesión asignada
+            if dia_sesion_previa is not None:
+                dias_orden = [d for d in [1, 2, 3, 4, 5] if d != dia_sesion_previa] + [dia_sesion_previa]
+            else:
+                dias_orden = [1, 2, 3, 4, 5]
+
+            # Búsqueda voraz del mejor casillero (día, bloque, sala)
+            for dia in dias_orden:
+                for bloque in bloques_inicio:
+                    if bloque + duracion - 1 > self.total_bloques:
+                        continue
+                    for sala in self.salas:
                         temp = Asignacion(
-                            sesion_id=item["sesion_id"],
-                            asignatura=item["asignatura_nombre"],
-                            profesor=item["docente"],
-                            nivel=item["nivel"],
+                            id_asig=asig["id"],
+                            asignatura=asig["nombre"],
+                            profesor=asig["profesor"],
+                            nivel=asig["nivel"],
                             duracion=duracion,
-                            dia=d,
-                            bloque=b,
-                            sala=s
+                            dia=dia,
+                            bloque=bloque,
+                            sala=sala
                         )
+
+                        # Costo voraz: penalizar choques directos de profesor, nivel y sala
+                        costo = 0.0
                         for g in genes:
                             if temp.solapa_con(g):
                                 if g.profesor == temp.profesor:
-                                    choques += 3
+                                    costo += evaluador.weights[0] * 10.0
                                 if g.nivel == temp.nivel:
-                                    choques += 2
+                                    costo += evaluador.weights[1] * 10.0
                                 if g.sala == temp.sala:
-                                    choques += 2
+                                    costo += evaluador.weights[3] * 10.0
 
-                        if choques < menor_choque:
-                            menor_choque = choques
-                            mejor_opcion = (d, b, s)
-                            if choques == 0:
+                        # Penalización leve si se asigna el mismo día para la misma asignatura
+                        if dia_sesion_previa is not None and dia == dia_sesion_previa:
+                            costo += 5.0
+
+                        if costo < menor_costo:
+                            menor_costo = costo
+                            mejor_slot = (dia, bloque, sala)
+                            if costo == 0.0:
                                 break
-                    if menor_choque == 0:
+                    if menor_costo == 0.0:
                         break
-                if menor_choque == 0:
+                if menor_costo == 0.0:
                     break
 
-            dia_asig, bloque_asig, sala_asig = mejor_opcion
+            dia_asig, bloque_asig, sala_asig = mejor_slot
             genes.append(Asignacion(
-                sesion_id=item["sesion_id"],
-                asignatura=item["asignatura_nombre"],
-                profesor=item["docente"],
-                nivel=item["nivel"],
+                id_asig=asig["id"],
+                asignatura=asig["nombre"],
+                profesor=asig["profesor"],
+                nivel=asig["nivel"],
                 duracion=duracion,
                 dia=dia_asig,
                 bloque=bloque_asig,
                 sala=sala_asig
             ))
 
-        return Horario(genes=genes)
+        # Construir y evaluar el horario resultante
+        horario = Horario(genes=genes)
+        evaluador.evaluar(horario)
+        t_end = time.time()
 
-    def ejecutar_benchmark_baseline(
-        self,
-        evaluador: FitnessEvaluator,
-        num_muestras: int = 30,
-        tipo: str = "aleatorio"
-    ) -> Dict[str, Any]:
-        """
-        Ejecuta múltiples repeticiones del baseline para obtener estadísticas
-        robustas (promedio, desviación estándar, mejor y peor caso).
-        """
-        fitnesses = []
-        distancias = []
-        penalizaciones_acum = [0, 0, 0, 0]
-        mejor_horario = None
-        mejor_fitness = -1.0
-
-        for i in range(num_muestras):
-            if tipo == "voraz":
-                h = self.generar_voraz(seed=1000 + i)
-            else:
-                h = self.generar_aleatorio(seed=1000 + i)
-
-            fit = evaluador.evaluar(h)
-            fitnesses.append(fit)
-            distancias.append(h.distancia)
-
-            for idx in range(4):
-                penalizaciones_acum[idx] += h.penalizaciones[idx]
-
-            if fit > mejor_fitness:
-                mejor_fitness = fit
-                mejor_horario = h
-
-        p_promedio = tuple(p / num_muestras for p in penalizaciones_acum)
-        fit_promedio = sum(fitnesses) / num_muestras
-        dist_promedio = sum(distancias) / num_muestras
-
-        fit_std = (sum((f - fit_promedio) ** 2 for f in fitnesses) / num_muestras) ** 0.5
-
+        p = horario.penalizaciones
         return {
-            "tipo": tipo,
-            "muestras": num_muestras,
-            "fitness_promedio": fit_promedio,
-            "fitness_std": fit_std,
-            "fitness_mejor": max(fitnesses),
-            "fitness_peor": min(fitnesses),
-            "distancia_promedio": dist_promedio,
-            "penalizaciones_promedio": {
-                "P_prof": p_promedio[0],
-                "P_asig": p_promedio[1],
-                "P_vent": p_promedio[2],
-                "P_sal": p_promedio[3],
+            "metodo": "Algoritmo Voraz (Greedy Baseline)",
+            "tiempo_segundos": t_end - t_start,
+            "fitness": horario.fitness,
+            "distancia": horario.distancia,
+            "penalizaciones": {
+                "P_prof": p[0],
+                "P_asig": p[1],
+                "P_vent": p[2],
+                "P_sal": p[3],
             },
-            "mejor_individuo": mejor_horario
+            "horario": horario
         }
+
+
+if __name__ == "__main__":
+    from src.data_loader import DataLoader
+    loader = DataLoader()
+    sesiones, salas = loader.extraer_datos()
+    evaluador = FitnessEvaluator()
+    greedy = GreedyBaseline(sesiones, salas)
+    res = greedy.ejecutar(evaluador)
+    print("=== RESULTADO BASELINE VORAZ (GREEDY) ===")
+    print(f"Método: {res['metodo']}")
+    print(f"Tiempo: {res['tiempo_segundos']:.4f} segundos")
+    print(f"Fitness F(H): {res['fitness']:.6f}")
+    print(f"Distancia D(H): {res['distancia']:.2f}")
+    print(f"Penalizaciones: {res['penalizaciones']}")

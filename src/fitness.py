@@ -19,7 +19,7 @@ class FitnessEvaluator:
         self,
         w_prof: float = 5.0,
         w_asig: float = 5.0,
-        w_vent: float = 0.05,
+        w_vent: float = 0.05, # las ventanas no son tan graves como los choques horarios o de salas (es una restricción blanda)
         w_sal: float = 5.0,
     ):
         """
@@ -29,6 +29,10 @@ class FitnessEvaluator:
         """
         self.weights = (w_prof, w_asig, w_vent, w_sal)
 
+
+    # ===========================================================
+    #       Determinar P(H)
+    # ===========================================================
     def evaluar_penalizaciones(self, horario: Horario) -> Tuple[int, int, int, int]:
         """
         Calcula el vector de penalizaciones P(H) = [P_prof, P_asig, P_vent, P_sal].
@@ -97,11 +101,17 @@ class FitnessEvaluator:
 
         return (p_prof, p_asig, p_vent, p_sal)
 
+
+    # ===========================================================
+    #       D(H): Distancia al origen
+    # ===========================================================
     def calcular_distancia(self, penalizaciones: Tuple[int, int, int, int]) -> float:
         """
         Calcula la distancia cuadrática ponderada al origen:
         D(H) = sqrt( w · P(H)^⊙2 )
         """
+
+        # esta es la fórmula que se definió en el modelo
         w_prof, w_asig, w_vent, w_sal = self.weights
         p_prof, p_asig, p_vent, p_sal = penalizaciones
 
@@ -113,6 +123,10 @@ class FitnessEvaluator:
         )
         return math.sqrt(suma_cuadratica)
 
+
+    # ===========================================================
+    #       F(H): Aptitud
+    # ===========================================================
     def calcular_fitness(self, distancia: float) -> float:
         """
         Función de aptitud normalizada F(H) in (0, 1]:
@@ -120,6 +134,9 @@ class FitnessEvaluator:
         """
         return 1.0 / (1.0 + distancia)
 
+    # ===========================================================
+    #       Recibe un horario y retorna su aptitud de inmediato
+    # ===========================================================
     def evaluar(self, horario: Horario) -> float:
         """
         Evalúa un horario completo, asignando in-place sus penalizaciones,

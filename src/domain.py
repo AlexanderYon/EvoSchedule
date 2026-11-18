@@ -1,8 +1,10 @@
 """
 Módulo de dominio para EvoSchedule.
-Define las entidades fundamentales del problema de asignación de horarios:
-- Asignacion (Gen): Representa la tupla t = (dia, bloque, duracion, profesor, asignatura, sala)
-- Horario (Individuo / Cromosoma): Conjunto H = {t1, t2, ..., tm} con su evaluación asociada.
+Define las entidades fundamentales del problema de asignación de horarios
+siguiendo estrictamente las especificaciones de DESC_PROBLEMA.md:
+
+- Asignacion (Gen): Tupla t = (dia, bloque, duracion, profesor, asignatura, sala)
+- Horario (Individuo / Cromosoma): H = { t_1, t_2, ..., t_m }
 """
 
 from dataclasses import dataclass, field
@@ -12,29 +14,30 @@ from typing import List, Tuple, Optional
 @dataclass
 class Asignacion:
     """
-    Representa una asignación atómica de horario (un gen en el cromosoma).
+    Tupla de asignación atómica de una asignatura (un gen en el cromosoma):
     t = (dia, bloque, duracion, profesor, asignatura, sala)
     """
-    sesion_id: str
+    id_asig: str
     asignatura: str
     profesor: str
     nivel: int
     duracion: int
-    dia: int        # 1: Lunes, 2: Martes, 3: Miércoles, 4: Jueves, 5: Viernes
-    bloque: int     # 1 a 8 (índice del bloque de 80 minutos)
-    sala: str       # Identificador de la sala asignada
+    dia: int        # 1 a 5 (Lunes a Viernes)
+    bloque: int     # 1 a n (Bloque de la jornada académica)
+    sala: str       # Identificador del espacio físico asignado
 
     def solapa_con(self, otra: 'Asignacion') -> bool:
-        """Determina si dos asignaciones coinciden en día y se solapan en bloques."""
+        """Determina si dos asignaciones coinciden en día y se solapan en tiempo."""
         if self.dia != otra.dia:
             return False
+        # Rango de bloques continuos: [inicio, inicio + duracion)
         inicio_a, fin_a = self.bloque, self.bloque + self.duracion
         inicio_b, fin_b = otra.bloque, otra.bloque + otra.duracion
         return max(inicio_a, inicio_b) < min(fin_a, fin_b)
 
     def clonar(self) -> 'Asignacion':
         return Asignacion(
-            sesion_id=self.sesion_id,
+            id_asig=self.id_asig,
             asignatura=self.asignatura,
             profesor=self.profesor,
             nivel=self.nivel,
@@ -48,7 +51,7 @@ class Asignacion:
 @dataclass
 class Horario:
     """
-    Representa un horario universitario completo (un individuo en el AG).
+    Horario completo universitario (un individuo en el Algoritmo Genético):
     H = { t_1, t_2, ..., t_m }
     """
     genes: List[Asignacion] = field(default_factory=list)

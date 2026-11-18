@@ -42,28 +42,35 @@ class Visualizer:
 
     @staticmethod
     def format_timetable(horario, nivel: int) -> str:
-        """Formatea el horario de un nivel específico en una grilla semanal legible."""
+        """Formatea el horario de un nivel específico en una grilla semanal legible de 16 bloques pedagógicos."""
         dias = ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES"]
-        bloques = [f"B{b}" for b in range(1, 9)]
+        bloques_horas = [
+            "08:10-08:50", "08:50-09:30", "09:40-10:20", "10:20-11:00",
+            "11:10-11:50", "11:50-12:30", "12:40-13:20", "13:20-14:00",
+            "14:10-14:50", "14:50-15:30", "15:40-16:20", "16:20-17:00",
+            "17:10-17:50", "17:50-18:30", "18:40-19:20", "19:20-20:00"
+        ]
+        total_b = 16
         genes_nivel = horario.obtener_por_nivel(nivel)
 
-        # Matriz [bloque 0..7][dia 0..4]
-        grilla = [["---" for _ in range(5)] for _ in range(8)]
+        # Matriz [bloque 0..15][dia 0..4]
+        grilla = [["---" for _ in range(5)] for _ in range(total_b)]
 
         for g in genes_nivel:
             d_idx = g.dia - 1
             for b in range(g.bloque, g.bloque + g.duracion):
-                if 1 <= b <= 8 and 0 <= d_idx < 5:
+                if 1 <= b <= total_b and 0 <= d_idx < 5:
                     nombre_corto = g.asignatura[:14]
                     grilla[b - 1][d_idx] = f"{nombre_corto} ({g.sala})"
 
-        col_w = 22
+        col_w = 25
         sep = "+" + "+".join(["-" * col_w for _ in range(6)]) + "+"
-        header = "| " + "Bloque".ljust(col_w - 2) + " | " + " | ".join([d.center(col_w - 2) for d in dias]) + " |"
+        header = "| " + "Bloque (Horario)".ljust(col_w - 2) + " | " + " | ".join([d.center(col_w - 2) for d in dias]) + " |"
 
         lines = [sep, header, sep]
-        for b_idx in range(8):
-            row_str = f"| B{b_idx+1} (80m)".ljust(col_w) + " | "
+        for b_idx in range(total_b):
+            label_bloque = f"B{b_idx+1:02d} {bloques_horas[b_idx]}"
+            row_str = f"| {label_bloque}".ljust(col_w) + " | "
             row_str += " | ".join([grilla[b_idx][d].ljust(col_w - 2) for d in range(5)]) + " |"
             lines.append(row_str)
         lines.append(sep)

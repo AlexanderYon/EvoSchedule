@@ -1,10 +1,12 @@
 """
 Interfaz de Usuario y Menú Funcional para EvoSchedule.
-Implementa el primer prototipo funcional interactivo de la interfaz de usuario:
+Implementa el prototipo interactivo de la interfaz de usuario:
+- Tratamiento homogéneo de asignaturas (m=45 genes)
 - Menú modular con navegación intuitiva
 - Exploración de datos (catálogo, docentes, infraestructura)
+- Baseline oficial exclusivo: Algoritmo Voraz (Greedy)
 - Configuración dinámica de hiperparámetros del AG
-- Visualización de la evolución en tiempo real y métricas del Baseline
+- Visualización de la evolución en tiempo real
 - Consulta interactiva del horario generado por nivel académico (I al XI)
 - Exportación del fenotipo óptimo a formatos estructurados.
 """
@@ -14,7 +16,7 @@ import os
 import json
 from src.data_loader import DataLoader
 from src.fitness import FitnessEvaluator
-from src.baseline import BaselineGenerator
+from src.baseline import GreedyBaseline
 from src.genetic import AlgoritmoGenetico
 from src.visualizer import Visualizer
 
@@ -22,10 +24,8 @@ from src.visualizer import Visualizer
 class EvoScheduleApp:
     def __init__(self):
         self.loader = DataLoader()
-        self.catalog = self.loader.extract_catalog()
-        self.rooms = self.loader.extract_rooms()
-        self.workload = self.loader.generate_sessions_workload()
-        self.eda = self.loader.eda_summary()
+        self.asignaturas, self.salas = self.loader.extraer_datos()
+        self.eda = self.loader.resumen_eda()
         self.evaluador = FitnessEvaluator(
             w_prof=5.0,
             w_asig=5.0,
@@ -38,15 +38,15 @@ class EvoScheduleApp:
     def mostrar_banner(self):
         print("\n" + "=" * 65)
         print("          EVOSCHEDULE - PLANIFICADOR GENÉTICO DE HORARIOS")
-        print("                 Prototipo de Interfaz v0.1")
+        print("                 Prototipo de Interfaz v0.3")
         print("=" * 65)
 
     def menu_principal(self):
         while True:
             self.mostrar_banner()
-            print(" [1]  Explorar Datos del Campus (EDA, Asignaturas y Aulas)")
-            print(" [2]  Ver Carga de Docentes y Distribución de Asignaturas")
-            print(" [3]  Ejecutar Benchmark de Baseline (Aleatorio vs Voraz)")
+            print(" [1]  Explorar Datos del Campus (Asignaturas, Docentes y Aulas)")
+            print(" [2]  Ver Distribución de Asignaturas por Nivel y Docente")
+            print(" [3]  Ejecutar Baseline Oficial: Algoritmo Voraz (Greedy)")
             print(" [4]  Configurar y Ejecutar Algoritmo Genético")
             print(" [5]  Ver Horario Semanal Resultante por Nivel Académico")
             print(" [6]  Exportar Horario a Formato JSON")
@@ -74,17 +74,16 @@ class EvoScheduleApp:
 
     def ver_datos_campus(self):
         print("\n--- RESUMEN DE DATOS DEL CAMPUS ---")
-        print(f"Total Asignaturas Oficiales: {self.eda['total_asignaturas']}")
-        print(f"Total Sesiones Atómicas a Planificar: {self.eda['total_sesiones_atómicas']}")
-        print(f"Total Docentes: {self.eda['total_docentes']}")
-        print(f"Total Salas Disponibles: {self.eda['total_salas_disponibles']}")
-        print(f"Aulas: {', '.join(self.rooms)}")
+        print(f"Total Asignaturas Oficiales: {self.eda['total_asignaturas']} (90 sesiones atómicas de 2 bloques)")
+        print(f"Total Docentes: {self.eda['total_profesores']}")
+        print(f"Total Salas Disponibles: {self.eda['total_salas']}")
+        print(f"Aulas: {', '.join(self.salas)}")
         input("\nPresione Enter para volver al menú...")
 
     def ver_docentes_distribucion(self):
         print("\n--- TOP DOCENTES CON MAYOR CARGA ---")
-        for doc, carga in self.eda["top_docentes_carga"]:
-            print(f" • {doc:<35} : {carga} sesiones/semana")
+        for doc, carga in self.eda["top_profesores_carga"]:
+            print(f" • {doc:<35} : {carga} asignaturas")
 
         print("\n--- ASIGNATURAS POR NIVEL ---")
         for niv, cant in self.eda["distribucion_por_nivel"].items():
@@ -92,54 +91,87 @@ class EvoScheduleApp:
         input("\nPresione Enter para volver al menú...")
 
     def ejecutar_baseline(self):
-        print("\nEjecutando evaluación de Baseline (30 repeticiones aleatorias)...")
-        generator = BaselineGenerator(self.workload, self.rooms)
-        res = generator.ejecutar_benchmark_baseline(self.evaluador, num_muestras=30, tipo="aleatorio")
-        print(f"\nResultados Baseline Aleatorio:")
-        print(f" - Fitness Promedio: {res['fitness_promedio']:.6f} +/- {res['fitness_std']:.6f}")
-        print(f" - Distancia D(H):   {res['distancia_promedio']:.2f}")
-        print(f" - Choques Docente:  {res['penalizaciones_promedio']['P_prof']:.2f}")
-        print(f" - Choques Nivel:    {res['penalizaciones_promedio']['P_asig']:.2f}")
-        print(f" - Ventanas Libres:  {res['penalizaciones_promedio']['P_vent']:.2f}")
-        print(f" - Choques de Sala:  {res['penalizaciones_promedio']['P_sal']:.2f}")
+        print("\nEjecutando Baseline Oficial: Algoritmo Voraz (Greedy Baseline)...")
+        greedy = GreedyBaseline(self.asignaturas, self.salas)
+        res = greedy.ejecutar(self.evaluador)
+        print(f"\nResultados Algoritmo Voraz (Greedy):")
+        print(f" - Tiempo de ejecución: {res['tiempo_segundos']:.4f} segundos")
+        print(f" - Fitness F(H):        {res['fitness']:.6f}")
+        print(f" - Distancia D(H):      {res['distancia']:.2f}")
+        print(f" - Choques Docente:     {res['penalizaciones']['P_prof']}")
+        print(f" - Choques Nivel:       {res['penalizaciones']['P_asig']}")
+        print(f" - Ventanas Libres:     {res['penalizaciones']['P_vent']}")
+        print(f" - Choques de Sala:     {res['penalizaciones']['P_sal']}")
         input("\nPresione Enter para volver al menú...")
 
     def ejecutar_ag_interactivo(self):
-        print("\n--- CONFIGURACIÓN DEL ALGORITMO GENÉTICO ---")
+        print("\n--- CONFIGURACIÓN DE HIPERPARÁMETROS DEL ALGORITMO GENÉTICO ---")
+        print("Presione [Enter] en cualquier parámetro para conservar su valor predeterminado.")
         try:
-            pob_input = input("Tamaño de Población [default 80]: ").strip()
-            pob = int(pob_input) if pob_input else 80
+            pob_input = input(" • Tamaño de Población N [default 100]: ").strip()
+            pob = int(pob_input) if pob_input else 100
 
-            gen_input = input("Número de Generaciones [default 60]: ").strip()
+            gen_input = input(" • Cantidad de Generaciones Fijas G [default 60]: ").strip()
             gens = int(gen_input) if gen_input else 60
-        except ValueError:
-            print("Valores no válidos, usando valores predeterminados (80 individuos, 60 gens).")
-            pob, gens = 80, 60
 
-        print(f"\nIniciando evolución ({pob} individuos, {gens} generaciones)...")
+            eli_input = input(" • Individuos Elitistas E [default 2]: ").strip()
+            elitismo = int(eli_input) if eli_input else 2
+
+            tor_input = input(" • Tamaño de Torneo k [default 3]: ").strip()
+            k_torneo = int(tor_input) if tor_input else 3
+
+            cru_input = input(" • Probabilidad de Cruce p_c (0.0 - 1.0) [default 0.85]: ").strip()
+            tasa_cruce = float(cru_input) if cru_input else 0.85
+
+            mut_input = input(" • Probabilidad de Mutación p_m (0.0 - 1.0) [default 0.05]: ").strip()
+            tasa_mutacion = float(mut_input) if mut_input else 0.05
+
+        except ValueError:
+            print("[!] Entrada no numérica detectada. Se usarán los hiperparámetros predeterminados.")
+            pob, gens, elitismo, k_torneo, tasa_cruce, tasa_mutacion = 100, 60, 2, 3, 0.85, 0.05
+
+        print(f"\n[+] Configuración activa:")
+        print(f"    - N={pob}, Generaciones fijas={gens}, Elitismo E={elitismo}, Torneo k={k_torneo}")
+        print(f"    - Cruce={tasa_cruce:.2f}, Mutación={tasa_mutacion:.2f}")
+        print(f"    - Escenario: 90 sesiones atómicas de 2 bloques en 16 bloques pedagógicos")
+
         ag = AlgoritmoGenetico(
-            workload=self.workload,
-            available_rooms=self.rooms,
+            asignaturas=self.asignaturas,
+            salas=self.salas,
             evaluador=self.evaluador,
             tam_poblacion=pob,
-            tasa_cruce=0.85,
-            tasa_mutacion=0.05,
-            elitismo=2
+            tasa_cruce=tasa_cruce,
+            tasa_mutacion=tasa_mutacion,
+            elitismo=elitismo,
+            k_torneo=k_torneo,
+            total_bloques=16,
+            dias=5
         )
-        self.ultimo_resultado = ag.evolucionar(num_generaciones=gens, verbose=True)
+        self.ultimo_resultado = ag.evolucionar(
+            num_generaciones=gens,
+            verbose=True
+        )
         self.mejor_horario = self.ultimo_resultado["mejor_individuo"]
         p = self.mejor_horario.penalizaciones
 
-        print("\n ¡Evolución finalizada con éxito!")
-        print(f"Mejor Fitness: {self.mejor_horario.fitness:.6f} | Distancia D(H): {self.mejor_horario.distancia:.2f}")
-        print(f"Penalizaciones: P_prof={p[0]}, P_asig={p[1]}, P_vent={p[2]}, P_sal={p[3]}")
+        print("\n=== EVOLUCIÓN CONCLUIDA ===")
+        print(f" • Generaciones ejecutadas: {gens}")
+        print(f" • Mejor Fitness F(H): {self.mejor_horario.fitness:.6f}")
+        print(f" • Distancia D(H):      {self.mejor_horario.distancia:.2f}")
+        print(f" • Penalizaciones:     P_prof={p[0]}, P_asig={p[1]}, P_vent={p[2]}, P_sal={p[3]}")
         input("\nPresione Enter para volver al menú...")
 
     def ver_horario_nivel(self):
         if not self.mejor_horario:
             print("\n[!] Aún no ha ejecutado el Algoritmo Genético. Ejecutando una pasada rápida...")
-            ag = AlgoritmoGenetico(self.workload, self.rooms, self.evaluador, tam_poblacion=60)
-            res = ag.evolucionar(num_generaciones=30, verbose=False)
+            ag = AlgoritmoGenetico(
+                self.asignaturas,
+                self.salas,
+                self.evaluador,
+                tam_poblacion=60,
+                total_bloques=16
+            )
+            res = ag.evolucionar(num_generaciones=25, verbose=False)
             self.mejor_horario = res["mejor_individuo"]
 
         print("\nSeleccione el Nivel a visualizar:")
@@ -173,14 +205,14 @@ class EvoScheduleApp:
 
         for g in self.mejor_horario.genes:
             datos_export.append({
-                "sesion_id": g.sesion_id,
+                "id_asignatura": g.id_asig,
                 "asignatura": g.asignatura,
                 "docente": g.profesor,
                 "nivel": g.nivel,
                 "dia_numero": g.dia,
                 "dia_nombre": dias_nombres[g.dia - 1] if 1 <= g.dia <= 5 else "N/A",
                 "bloque": g.bloque,
-                "duracion_bloques": g.duracion,
+                "duracion": g.duracion,
                 "sala": g.sala
             })
 
@@ -194,7 +226,7 @@ class EvoScheduleApp:
                     "p_vent": self.mejor_horario.penalizaciones[2],
                     "p_sal": self.mejor_horario.penalizaciones[3],
                 },
-                "total_sesiones": len(datos_export),
+                "total_asignaturas": len(datos_export),
                 "horario": datos_export
             }, f, indent=2, ensure_ascii=False)
 
