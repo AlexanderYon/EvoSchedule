@@ -10,16 +10,6 @@ Proyecto de Inteligencia Artificial enfocado en la resolución del **University 
 EvoSchedule/
 ├── dataset/
 │   └── HorarioICI_2026-2.xlsx      # Catálogo académico real (45 asignaturas, 32 docentes, 17 salas)
-├── docs/
-│   ├── Informe_Avance1.pdf         # Informe formal del Avance 1 listo para entrega (5 págs: 1 portada + 4 contenido)
-│   ├── PRESENTACION_4_LAMINAS.md   # Guión cronometrado (5 min / 4 láminas) y batería de defensa oral
-│   ├── DIAGRAMA_FLUJO.md           # Diagrama conceptual del sistema (Entrada -> Pipeline -> Salida)
-│   ├── gui_preview.png             # Captura real de la interfaz gráfica estilo Excel
-│   └── requisitos_proyecto.txt     # Pauta y rúbrica oficial de evaluación del curso
-├── logs/
-│   ├── eda_summary.json            # Métricas del Análisis Exploratorio de Datos (EDA)
-│   ├── baseline_results.json       # Métricas de ejecución del Baseline Voraz (Greedy)
-│   └── ag_evolution.json           # Registro generacional de fitness, distancia y penalizaciones del AG
 ├── src/
 │   ├── __init__.py
 │   ├── data_loader.py              # Parser OpenXML nativo (sin dependencias): extrae 45 asignaturas y 90 sesiones
@@ -31,8 +21,6 @@ EvoSchedule/
 ├── app.py                          # Prototipo interactivo por consola (CLI Dashboard)
 ├── gui.py                          # Interfaz gráfica de escritorio en PyQt6 estilo planilla Excel
 ├── run_experiments.py              # Script maestro que ejecuta el benchmark completo de punta a punta
-├── informe.tex                     # Código fuente LaTeX del informe formal
-├── informe.pdf                     # PDF compilado del informe de avance
 ├── requirements.txt                # Dependencias recomendadas del entorno (PyQt6 para GUI)
 └── README.md                       # Orientación y documentación general del proyecto
 ```
@@ -66,13 +54,6 @@ Permite inspeccionar datos del campus, ejecutar el Baseline Greedy o el AG con p
 
 ```bash
 python3 app.py
-```
-
-### 4. Compilar el Informe en LaTeX
-Para recompilar el documento formal [informe.tex](informe.tex) y generar [informe.pdf](informe.pdf):
-
-```bash
-pdflatex -interaction=nonstopmode informe.tex
 ```
 
 ---
@@ -115,24 +96,6 @@ El modelo sigue las siguientes especificaciones formales:
 - **Mutación Estocástica ($p_m = 0.05$):** Modifica aleatoriamente el día, el bloque modular o la sala física asignada a un gen.
 - **Mecanismo de Supervivencia:** **Reemplazo Generacional con Elitismo ($E = 2$)**. Los dos mejores individuos de la generación se clonan directamente a la siguiente población, garantizando que el mejor fitness sea monótonamente no decreciente.
 - **Criterio de Parada:** Cantidad fija de generaciones ($G = 60$), asegurando una cota superior determinista de tiempo de cómputo para evaluaciones comparativas uniformes.
-
----
-
-## 📊 Resultados Comparativos: Baseline vs. Algoritmo Genético
-
-Resultados obtenidos en el protocolo estandarizado de benchmark (instancia real de 90 sesiones y 16 bloques):
-
-| Métrica / Dimensión | Baseline Voraz (Greedy) | Algoritmo Genético (AG) |
-| :--- | :---: | :---: |
-| **Tipo de Enfoque** | Heurística Constructiva Determinista | Metaheurística Poblacional Estocástica |
-| **Tiempo de Cómputo** | **0.0884 s** | **2.55 s** |
-| **Aptitud $F(H)$** | **1.000000** | **0.088227** |
-| **Distancia $D(H)$** | **0.00** | **10.33** |
-| **Choque Docente ($P_{prof}$)** | **0** | **0** |
-| **Choque de Nivel ($P_{asig}$)** | **0** | **1** |
-| **Choque de Sala ($P_{sal}$)** | **0** | **1** |
-| **Ventanas Libres ($P_{vent}$)** | **0** | **44** |
-| **Diversidad de Soluciones** | Solución Única Rígida | **Población de Horarios Alternativos** |
 
 ---
 
