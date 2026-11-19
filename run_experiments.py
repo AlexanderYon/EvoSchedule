@@ -135,6 +135,7 @@ def main():
     print(f"{'Solap. Asig Nivel (P_asig)':<25} | {bench_greedy['penalizaciones']['P_asig']:<25d} | {p_ag[1]:<25d}")
     print(f"{'Ventanas Libres (P_vent)':<25} | {bench_greedy['penalizaciones']['P_vent']:<25d} | {p_ag[2]:<25d}")
     print(f"{'Solap. de Sala (P_sal)':<25} | {bench_greedy['penalizaciones']['P_sal']:<25d} | {p_ag[3]:<25d}")
+    print(f"{'Estado de Factibilidad':<25} | {'Óptimo Global Factible':<25} | {'Aproximación Heurística':<25}")
     print("-" * 80)
 
     print("\nEjemplo de Malla Generada para Nivel 1 (Primer Año):")

@@ -202,16 +202,24 @@ class EvoScheduleGUI(QMainWindow):
         self.horario_actual = res["horario"]
         p = res["penalizaciones"]
 
+        p_gr = res['penalizaciones']
+        if res['distancia'] == 0:
+            estado_gr = "ÓPTIMO GLOBAL FACTIBLE (0 violaciones)"
+        elif p_gr['P_prof'] == 0 and p_gr['P_asig'] == 0 and p_gr['P_sal'] == 0:
+            estado_gr = f"FACTIBLE SUBÓPTIMO (0 choques duros, {p_gr['P_vent']} ventanas)"
+        else:
+            estado_gr = f"APROXIMACIÓN CON CONFLICTOS ({p_gr['P_prof']+p_gr['P_asig']+p_gr['P_sal']} choques duros)"
+
         info = (
             f"=== BASELINE GREEDY ===\n"
             f"Tiempo: {res['tiempo_segundos']:.4f} s\n"
             f"Fitness F(H): {res['fitness']:.6f}\n"
             f"Distancia D(H): {res['distancia']:.2f}\n"
-            f"Choques Docente: {p['P_prof']}\n"
-            f"Choques Asignatura: {p['P_asig']}\n"
-            f"Ventanas Libres: {p['P_vent']}\n"
-            f"Sobrecupo Salas: {p['P_sal']}\n"
-            f"Estado: {'ÓPTIMO FACTIBLE' if res['distancia'] == 0 else 'CON CONFLICTOS RESIDUALES'}"
+            f"Choques Docente: {p_gr['P_prof']}\n"
+            f"Choques Asignatura: {p_gr['P_asig']}\n"
+            f"Ventanas Libres: {p_gr['P_vent']}\n"
+            f"Sobrecupo Salas: {p_gr['P_sal']}\n"
+            f"Estado: {estado_gr}"
         )
         self.txt_metricas.setText(info)
         self._actualizar_grilla()
@@ -239,6 +247,13 @@ class EvoScheduleGUI(QMainWindow):
         self.horario_actual = res["mejor_individuo"]
         p = self.horario_actual.penalizaciones
 
+        if self.horario_actual.distancia == 0:
+            estado_ga = "ÓPTIMO GLOBAL FACTIBLE (0 violaciones)"
+        elif p[0] == 0 and p[1] == 0 and p[3] == 0:
+            estado_ga = f"FACTIBLE SUBÓPTIMO (0 choques duros, {p[2]} ventanas)"
+        else:
+            estado_ga = f"APROXIMACIÓN HEURÍSTICA ({p[0]+p[1]+p[3]} choques duros residuales)"
+
         info = (
             f"=== ALGORITMO GENÉTICO ===\n"
             f"Tiempo: {t_total:.4f} s\n"
@@ -249,7 +264,7 @@ class EvoScheduleGUI(QMainWindow):
             f"Choques Asignatura: {p[1]}\n"
             f"Ventanas Libres: {p[2]}\n"
             f"Sobrecupo Salas: {p[3]}\n"
-            f"Estado: {'ÓPTIMO FACTIBLE' if self.horario_actual.distancia == 0 else 'MEJOR SOLUCIÓN ENCONTRADA'}"
+            f"Estado: {estado_ga}"
         )
         self.txt_metricas.setText(info)
         self._actualizar_grilla()
