@@ -135,13 +135,16 @@ class EvoScheduleApp:
             mut_input = input(" • Probabilidad de Mutación p_m (0.0 - 1.0) [default 0.05]: ").strip()
             tasa_mutacion = float(mut_input) if mut_input else 0.05
 
+            seed_input = input(" • Semilla RNG fija (Opcional, [Enter]=estocástico libre): ").strip()
+            seed = int(seed_input) if seed_input else None
+
         except ValueError:
             print("[!] Entrada no numérica detectada. Se usarán los hiperparámetros predeterminados.")
-            pob, gens, elitismo, k_torneo, tasa_cruce, tasa_mutacion = 100, 60, 2, 3, 0.85, 0.05
+            pob, gens, elitismo, k_torneo, tasa_cruce, tasa_mutacion, seed = 100, 60, 2, 3, 0.85, 0.05, None
 
         print(f"\n[+] Configuración activa:")
         print(f"    - N={pob}, Generaciones fijas={gens}, Elitismo E={elitismo}, Torneo k={k_torneo}")
-        print(f"    - Cruce={tasa_cruce:.2f}, Mutación={tasa_mutacion:.2f}")
+        print(f"    - Cruce={tasa_cruce:.2f}, Mutación={tasa_mutacion:.2f}, Semilla={'Aleatoria' if seed is None else seed}")
         print(f"    - Escenario: 90 sesiones atómicas de 2 bloques en 16 bloques pedagógicos")
 
         ag = AlgoritmoGenetico(
@@ -154,7 +157,8 @@ class EvoScheduleApp:
             elitismo=elitismo,
             k_torneo=k_torneo,
             total_bloques=16,
-            dias=5
+            dias=5,
+            seed=seed
         )
         self.ultimo_resultado = ag.evolucionar(
             num_generaciones=gens,

@@ -131,6 +131,12 @@ class EvoScheduleGUI(QMainWindow):
         self.spin_mut.setValue(0.05)
         layout_params.addWidget(self.spin_mut)
 
+        layout_params.addWidget(QLabel("Semilla RNG (0 = Estocástico Libre):"))
+        self.spin_seed = QSpinBox()
+        self.spin_seed.setRange(0, 999999)
+        self.spin_seed.setValue(0)
+        layout_params.addWidget(self.spin_seed)
+
         # Botones
         self.btn_greedy = QPushButton("▶ Ejecutar Baseline Greedy")
         self.btn_greedy.clicked.connect(self.ejecutar_greedy)
@@ -225,6 +231,9 @@ class EvoScheduleGUI(QMainWindow):
         self._actualizar_grilla()
 
     def ejecutar_ga(self):
+        seed_val = self.spin_seed.value()
+        seed = seed_val if seed_val > 0 else None
+
         ga = AlgoritmoGenetico(
             asignaturas=self.sesiones,
             salas=self.salas,
@@ -235,7 +244,8 @@ class EvoScheduleGUI(QMainWindow):
             elitismo=self.spin_elitismo.value(),
             k_torneo=self.spin_torneo.value(),
             total_bloques=16,
-            dias=5
+            dias=5,
+            seed=seed
         )
         t_ini = time.time()
         res = ga.evolucionar(

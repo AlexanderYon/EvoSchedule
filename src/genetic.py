@@ -29,7 +29,7 @@ class AlgoritmoGenetico:
         k_torneo: int = 3, # cantidad de individuos que serán seleccionados en el torneo para evaluar su aptitud
         total_bloques: int = 16, # son 16 bloques de 45 minutos c/u
         dias: int = 5, # asumimos que son clases solo de lunes a viernes
-        seed: int = 42
+        seed: int = None
     ):
         self.asignaturas = asignaturas
         self.salas = salas
