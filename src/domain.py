@@ -78,5 +78,8 @@ class Horario:
     def obtener_por_profesor(self, profesor: str) -> List[Asignacion]:
         return [g for g in self.genes if g.profesor == profesor]
 
+    def obtener_por_sala(self, sala: str) -> List[Asignacion]:
+        return [g for g in self.genes if g.sala == sala]
+
     def obtener_por_dia(self, dia: int) -> List[Asignacion]:
         return [g for g in self.genes if g.dia == dia]

@@ -1,23 +1,19 @@
 """
-gui.py - Interfaz Gráfica para EvoSchedule estilo Excel.
-Muestra la malla horaria en formato idéntico a una planilla de cálculo:
-- Filas: Bloques pedagógicos individuales de 45 minutos (Bloques 1 a 8).
-- Columnas: Días de la semana (Lunes a Viernes).
-- Celdas combinadas (Merge / setSpan): Clases de 2 bloques continuos (90 min)
-  ocupan 2 casilleros verticales combinados, idéntico a las celdas fusionadas de Excel.
-- Selector interactivo de nivel curricular / cohorte.
+gui.py - Interfaz Gráfica para EvoSchedule (Avance 2).
+Implementada con Tkinter (biblioteca estándar de Python).
+
+Requisitos cumplidos:
+- Muestra el horario semanal por nivel, por docente y por sala.
+- Resumen de restricciones violadas (P_prof, P_asig, P_vent, P_sal).
+- Permite ejecutar tanto el Baseline Voraz como el Algoritmo Genético.
 """
 
 import os
 import sys
 import time
-from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QTableWidget, QTableWidgetItem, QSpinBox,
-    QDoubleSpinBox, QGroupBox, QHeaderView, QTextEdit, QComboBox, QCheckBox
-)
-from PyQt6.QtGui import QColor, QFont
-from PyQt6.QtCore import Qt
+import tkinter as tk
+from tkinter import ttk, messagebox
+from typing import List
 
 from src.data_loader import DataLoader
 from src.fitness import FitnessEvaluator
@@ -25,364 +21,199 @@ from src.baseline import GreedyBaseline
 from src.genetic import AlgoritmoGenetico
 
 
-class EvoScheduleGUI(QMainWindow):
+class EvoScheduleGUI(tk.Tk):
+    BLOQUES = [
+        "B01 (08:10 - 08:50)", "B02 (08:50 - 09:30)", "B03 (09:40 - 10:20)", "B04 (10:20 - 11:00)",
+        "B05 (11:10 - 11:50)", "B06 (11:50 - 12:30)", "B07 (12:40 - 13:20)", "B08 (13:20 - 14:00)",
+        "B09 (14:10 - 14:50)", "B10 (14:50 - 15:30)", "B11 (15:40 - 16:20)", "B12 (16:20 - 17:00)",
+        "B13 (17:10 - 17:50)", "B14 (17:50 - 18:30)", "B15 (18:40 - 19:20)", "B16 (19:20 - 20:00)"
+    ]
+    DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
+
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("EvoSchedule - Planificador de Horarios Universitarios (Vista Excel)")
-        self.resize(1250, 850)
+        self.title("EvoSchedule - Generador de Horarios Universitarios (Avance 2)")
+        self.geometry("1100x680")
 
-        # Carga de datos base (45 asignaturas -> 90 sesiones de 2 bloques)
+        # Cargar datos
         self.loader = DataLoader()
         self.sesiones, self.salas = self.loader.extraer_datos()
         self.evaluador = FitnessEvaluator()
         self.horario_actual = None
 
-        # 16 bloques pedagógicos de 45 minutos (jornada completa del Excel: mañana y tarde)
-        self.bloques_info = [
-            ("Bloque 1", "08:10 - 08:50"),
-            ("Bloque 2", "08:50 - 09:30"),
-            ("Bloque 3", "09:40 - 10:20"),
-            ("Bloque 4", "10:20 - 11:00"),
-            ("Bloque 5", "11:10 - 11:50"),
-            ("Bloque 6", "11:50 - 12:30"),
-            ("Bloque 7", "12:40 - 13:20"),
-            ("Bloque 8", "13:20 - 14:00"),
-            ("Bloque 9", "14:10 - 14:50"),
-            ("Bloque 10", "14:50 - 15:30"),
-            ("Bloque 11", "15:40 - 16:20"),
-            ("Bloque 12", "16:20 - 17:00"),
-            ("Bloque 13", "17:10 - 17:50"),
-            ("Bloque 14", "17:50 - 18:30"),
-            ("Bloque 15", "18:40 - 19:20"),
-            ("Bloque 16", "19:20 - 20:00"),
-        ]
+        self.docentes = sorted(list(set(s["profesor"] for s in self.sesiones)))
 
-        self._init_ui()
+        self._crear_widgets()
 
-    def _init_ui(self):
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QHBoxLayout(central_widget)
+    def _crear_widgets(self):
+        # Panel lateral izquierdo (Controles y Métricas)
+        panel_izq = ttk.Frame(self, padding=10, width=320)
+        panel_izq.pack(side=tk.LEFT, fill=tk.Y)
 
-        # Panel Izquierdo: Controles y Parámetros
-        panel_control = QVBoxLayout()
-        group_params = QGroupBox("Panel de Control y Parámetros")
-        layout_params = QVBoxLayout()
+        ttk.Label(panel_izq, text="Panel de Control", font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(0, 10))
 
-        lbl_info = QLabel(
-            f"<b>Catálogo Académico:</b><br>"
-            f"• Asignaturas: 45 (90 sesiones semanales)<br>"
-            f"• Duración clase: 2 bloques de 45 min (90 min)<br>"
-            f"• Salas disponibles: {len(self.salas)}<br>"
-            f"• Jornada: 5 días x 16 bloques de 45 min (Mañana y Tarde)"
-        )
-        layout_params.addWidget(lbl_info)
+        # Botones de ejecución
+        ttk.Button(panel_izq, text="▶ Ejecutar Baseline (Greedy)", command=self.ejecutar_baseline).pack(fill=tk.X, pady=3)
+        ttk.Button(panel_izq, text="⚡ Ejecutar Algoritmo Genético", command=self.ejecutar_ag).pack(fill=tk.X, pady=3)
 
-        # Filtro de visualización tipo Excel
-        layout_params.addWidget(QLabel("<b>Filtrar Cohorte / Nivel Curricular:</b>"))
-        self.combo_filtro = QComboBox()
-        self.combo_filtro.addItems([
-            "Nivel I y II (Año 1)",
-            "Nivel III y IV (Año 2)",
-            "Nivel V y VI (Año 3)",
-            "Nivel VII y VIII (Año 4)",
-            "Nivel XI (Año 5)",
-            "Ver Todo (Campus Global)"
-        ])
-        self.combo_filtro.currentIndexChanged.connect(self._actualizar_grilla)
-        layout_params.addWidget(self.combo_filtro)
+        ttk.Separator(panel_izq, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
 
-        # Parámetros AG
-        layout_params.addWidget(QLabel("Tamaño Población (N):"))
-        self.spin_pob = QSpinBox()
-        self.spin_pob.setRange(20, 300)
-        self.spin_pob.setValue(100)
-        layout_params.addWidget(self.spin_pob)
+        # Filtros de vista
+        ttk.Label(panel_izq, text="Modo de Visualización:", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=2)
+        self.modo_vista = tk.StringVar(value="nivel")
+        frame_radio = ttk.Frame(panel_izq)
+        frame_radio.pack(fill=tk.X, pady=2)
+        ttk.Radiobutton(frame_radio, text="Nivel", variable=self.modo_vista, value="nivel", command=self._actualizar_combo).pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(frame_radio, text="Docente", variable=self.modo_vista, value="docente", command=self._actualizar_combo).pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(frame_radio, text="Sala", variable=self.modo_vista, value="sala", command=self._actualizar_combo).pack(side=tk.LEFT, padx=5)
 
-        layout_params.addWidget(QLabel("Generaciones Máximas:"))
-        self.spin_gen = QSpinBox()
-        self.spin_gen.setRange(10, 500)
-        self.spin_gen.setValue(60)
-        layout_params.addWidget(self.spin_gen)
+        ttk.Label(panel_izq, text="Seleccionar elemento:").pack(anchor="w", pady=(5, 2))
+        self.combo_item = ttk.Combobox(panel_izq, state="readonly")
+        self.combo_item.pack(fill=tk.X, pady=2)
+        self.combo_item.bind("<<ComboboxSelected>>", lambda e: self.actualizar_grilla())
 
-        layout_params.addWidget(QLabel("Individuos Elitistas (E):"))
-        self.spin_elitismo = QSpinBox()
-        self.spin_elitismo.setRange(1, 20)
-        self.spin_elitismo.setValue(2)
-        layout_params.addWidget(self.spin_elitismo)
+        ttk.Separator(panel_izq, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
 
-        layout_params.addWidget(QLabel("Tamaño de Torneo (k):"))
-        self.spin_torneo = QSpinBox()
-        self.spin_torneo.setRange(2, 10)
-        self.spin_torneo.setValue(3)
-        layout_params.addWidget(self.spin_torneo)
+        # Panel de Métricas / Restricciones violadas
+        ttk.Label(panel_izq, text="Resumen de Métricas:", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=2)
+        self.lbl_tiempo = ttk.Label(panel_izq, text="Tiempo: --")
+        self.lbl_tiempo.pack(anchor="w")
+        self.lbl_fitness = ttk.Label(panel_izq, text="Fitness F(H): --", font=("Segoe UI", 9, "bold"))
+        self.lbl_fitness.pack(anchor="w")
+        self.lbl_distancia = ttk.Label(panel_izq, text="Distancia D(H): --")
+        self.lbl_distancia.pack(anchor="w")
 
-        layout_params.addWidget(QLabel("Probabilidad de Cruce:"))
-        self.spin_cruce = QDoubleSpinBox()
-        self.spin_cruce.setRange(0.10, 1.00)
-        self.spin_cruce.setSingleStep(0.05)
-        self.spin_cruce.setValue(0.85)
-        layout_params.addWidget(self.spin_cruce)
+        ttk.Label(panel_izq, text="\nRestricciones Violadas:", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=2)
+        self.lbl_prof = ttk.Label(panel_izq, text="• Choques Docente (P_prof): --")
+        self.lbl_prof.pack(anchor="w")
+        self.lbl_asig = ttk.Label(panel_izq, text="• Choques Nivel (P_asig): --")
+        self.lbl_asig.pack(anchor="w")
+        self.lbl_vent = ttk.Label(panel_izq, text="• Ventanas Libres (P_vent): --")
+        self.lbl_vent.pack(anchor="w")
+        self.lbl_sal = ttk.Label(panel_izq, text="• Choques Sala (P_sal): --")
+        self.lbl_sal.pack(anchor="w")
+        self.lbl_estado = ttk.Label(panel_izq, text="Estado: Esperando ejecución", foreground="#1565C0")
+        self.lbl_estado.pack(anchor="w", pady=(10, 0))
 
-        layout_params.addWidget(QLabel("Probabilidad de Mutación:"))
-        self.spin_mut = QDoubleSpinBox()
-        self.spin_mut.setRange(0.01, 0.50)
-        self.spin_mut.setSingleStep(0.01)
-        self.spin_mut.setValue(0.05)
-        layout_params.addWidget(self.spin_mut)
+        # Panel principal derecho (Grilla de Horario)
+        panel_der = ttk.Frame(self, padding=10)
+        panel_der.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-        layout_params.addWidget(QLabel("Semilla RNG (0 = Estocástico Libre):"))
-        self.spin_seed = QSpinBox()
-        self.spin_seed.setRange(0, 999999)
-        self.spin_seed.setValue(0)
-        layout_params.addWidget(self.spin_seed)
+        self.lbl_titulo = ttk.Label(panel_der, text="Horario Semanal", font=("Segoe UI", 12, "bold"))
+        self.lbl_titulo.pack(anchor="w", pady=(0, 5))
 
-        # Botones
-        self.btn_greedy = QPushButton("▶ Ejecutar Baseline Greedy")
-        self.btn_greedy.clicked.connect(self.ejecutar_greedy)
-        layout_params.addWidget(self.btn_greedy)
+        columnas = ["bloque"] + [f"dia_{i}" for i in range(1, 6)]
+        self.tree = ttk.Treeview(panel_der, columns=columnas, show="headings", height=16)
 
-        self.btn_ga = QPushButton("⚡ Ejecutar Algoritmo Genético")
-        self.btn_ga.clicked.connect(self.ejecutar_ga)
-        layout_params.addWidget(self.btn_ga)
+        self.tree.heading("bloque", text="Bloque")
+        self.tree.column("bloque", width=140, anchor="center")
+        for i, d in enumerate(self.DIAS, 1):
+            self.tree.heading(f"dia_{i}", text=d.upper())
+            self.tree.column(f"dia_{i}", width=150, anchor="w")
 
-        # Métricas
-        layout_params.addWidget(QLabel("Métricas de Rendimiento:"))
-        self.txt_metricas = QTextEdit()
-        self.txt_metricas.setReadOnly(True)
-        layout_params.addWidget(self.txt_metricas)
+        scroll_y = ttk.Scrollbar(panel_der, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scroll_y.set)
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
 
-        group_params.setLayout(layout_params)
-        panel_control.addWidget(group_params)
-        main_layout.addLayout(panel_control, 1)
+        self._actualizar_combo()
 
-        # Panel Derecho: Malla Horaria Semanal (Estilo Excel)
-        panel_resultado = QVBoxLayout()
-        lbl_grilla = QLabel("<b>Planilla de Horario Semanal (Filas = Bloques de 45 min | Columnas = Días):</b>")
-        panel_resultado.addWidget(lbl_grilla)
+    def _actualizar_combo(self):
+        modo = self.modo_vista.get()
+        if modo == "nivel":
+            self.combo_item["values"] = ["Nivel 1", "Nivel 2", "Nivel 3", "Nivel 4", "Nivel 5"]
+            self.combo_item.current(0)
+        elif modo == "docente":
+            self.combo_item["values"] = self.docentes
+            self.combo_item.current(0)
+        elif modo == "sala":
+            self.combo_item["values"] = self.salas
+            self.combo_item.current(0)
+        self.actualizar_grilla()
 
-        self.tabla = QTableWidget()
-        self.tabla.setColumnCount(6)
-        self.tabla.setHorizontalHeaderLabels([
-            "Bloque (45 min)", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES"
-        ])
-
-        # Estilo de encabezados tipo Excel
-        self.tabla.setStyleSheet("""
-            QTableWidget {
-                gridline-color: #D0D0D0;
-                background-color: #FFFFFF;
-                font-family: 'Segoe UI', Arial, sans-serif;
-            }
-            QHeaderView::section {
-                background-color: #E6E8EA;
-                color: #263238;
-                font-weight: bold;
-                border: 1px solid #B0BEC5;
-                padding: 4px;
-            }
-        """)
-
-        self.tabla.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        for c in range(1, 6):
-            self.tabla.horizontalHeader().setSectionResizeMode(c, QHeaderView.ResizeMode.Stretch)
-
-        # 8 filas, cada una representando 1 bloque de 45 minutos
-        self.tabla.setRowCount(len(self.bloques_info))
-        for r, (nombre_b, horario_b) in enumerate(self.bloques_info):
-            texto_col0 = f" {nombre_b}\n {horario_b} "
-            item = QTableWidgetItem(texto_col0)
-            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            item.setBackground(QColor("#F5F7FA"))
-            item.setForeground(QColor("#37474F"))
-            item.setFont(QFont("Arial", 9, QFont.Weight.Bold))
-            self.tabla.setItem(r, 0, item)
-            self.tabla.setRowHeight(r, 42)
-
-        panel_resultado.addWidget(self.tabla)
-        main_layout.addLayout(panel_resultado, 3)
-
-    def ejecutar_greedy(self):
+    def ejecutar_baseline(self):
+        t0 = time.time()
         greedy = GreedyBaseline(self.sesiones, self.salas)
         res = greedy.ejecutar(self.evaluador)
         self.horario_actual = res["horario"]
-        p = res["penalizaciones"]
+        self._mostrar_metricas(res["tiempo_segundos"], "Baseline Voraz")
 
-        p_gr = res['penalizaciones']
-        if res['distancia'] == 0:
-            estado_gr = "ÓPTIMO GLOBAL FACTIBLE (0 violaciones)"
-        elif p_gr['P_prof'] == 0 and p_gr['P_asig'] == 0 and p_gr['P_sal'] == 0:
-            estado_gr = f"FACTIBLE SUBÓPTIMO (0 choques duros, {p_gr['P_vent']} ventanas)"
-        else:
-            estado_gr = f"APROXIMACIÓN CON CONFLICTOS ({p_gr['P_prof']+p_gr['P_asig']+p_gr['P_sal']} choques duros)"
-
-        info = (
-            f"=== BASELINE GREEDY ===\n"
-            f"Tiempo: {res['tiempo_segundos']:.4f} s\n"
-            f"Fitness F(H): {res['fitness']:.6f}\n"
-            f"Distancia D(H): {res['distancia']:.2f}\n"
-            f"Choques Docente: {p_gr['P_prof']}\n"
-            f"Choques Asignatura: {p_gr['P_asig']}\n"
-            f"Ventanas Libres: {p_gr['P_vent']}\n"
-            f"Sobrecupo Salas: {p_gr['P_sal']}\n"
-            f"Estado: {estado_gr}"
-        )
-        self.txt_metricas.setText(info)
-        self._actualizar_grilla()
-
-    def ejecutar_ga(self):
-        seed_val = self.spin_seed.value()
-        seed = seed_val if seed_val > 0 else None
-
-        ga = AlgoritmoGenetico(
-            asignaturas=self.sesiones,
-            salas=self.salas,
-            evaluador=self.evaluador,
-            tam_poblacion=self.spin_pob.value(),
-            tasa_cruce=self.spin_cruce.value(),
-            tasa_mutacion=self.spin_mut.value(),
-            elitismo=self.spin_elitismo.value(),
-            k_torneo=self.spin_torneo.value(),
-            total_bloques=16,
-            dias=5,
-            seed=seed
-        )
-        t_ini = time.time()
-        res = ga.evolucionar(
-            num_generaciones=self.spin_gen.value(),
-            verbose=False
-        )
-        t_total = time.time() - t_ini
-
+    def ejecutar_ag(self):
+        t0 = time.time()
+        ag = AlgoritmoGenetico(self.sesiones, self.salas, self.evaluador, tam_poblacion=80, seed=123)
+        res = ag.evolucionar(num_generaciones=40, verbose=False)
         self.horario_actual = res["mejor_individuo"]
+        self._mostrar_metricas(time.time() - t0, "Algoritmo Genético")
+
+    def _mostrar_metricas(self, tiempo: float, metodo: str):
         p = self.horario_actual.penalizaciones
+        self.lbl_tiempo.config(text=f"Tiempo: {tiempo:.3f} s ({metodo})")
+        self.lbl_fitness.config(text=f"Fitness F(H): {self.horario_actual.fitness:.6f}")
+        self.lbl_distancia.config(text=f"Distancia D(H): {self.horario_actual.distancia:.2f}")
+        self.lbl_prof.config(text=f"• Choques Docente (P_prof): {p[0]}")
+        self.lbl_asig.config(text=f"• Choques Nivel (P_asig): {p[1]}")
+        self.lbl_vent.config(text=f"• Ventanas Libres (P_vent): {p[2]}")
+        self.lbl_sal.config(text=f"• Choques Sala (P_sal): {p[3]}")
 
+        duros = p[0] + p[1] + p[3]
         if self.horario_actual.distancia == 0:
-            estado_ga = "ÓPTIMO GLOBAL FACTIBLE (0 violaciones)"
-        elif p[0] == 0 and p[1] == 0 and p[3] == 0:
-            estado_ga = f"FACTIBLE SUBÓPTIMO (0 choques duros, {p[2]} ventanas)"
+            self.lbl_estado.config(text="Estado: Óptimo Global Factible (0 violaciones)", foreground="#2E7D32")
+        elif duros == 0:
+            self.lbl_estado.config(text=f"Estado: Factible ({p[2]} ventanas libres)", foreground="#1565C0")
         else:
-            estado_ga = f"APROXIMACIÓN HEURÍSTICA ({p[0]+p[1]+p[3]} choques duros residuales)"
+            self.lbl_estado.config(text=f"Estado: Subóptimo ({duros} choques duros)", foreground="#C62828")
 
-        info = (
-            f"=== ALGORITMO GENÉTICO ===\n"
-            f"Tiempo: {t_total:.4f} s\n"
-            f"Generaciones: {res['generaciones']}\n"
-            f"Fitness F(H): {self.horario_actual.fitness:.6f}\n"
-            f"Distancia D(H): {self.horario_actual.distancia:.2f}\n"
-            f"Choques Docente: {p[0]}\n"
-            f"Choques Asignatura: {p[1]}\n"
-            f"Ventanas Libres: {p[2]}\n"
-            f"Sobrecupo Salas: {p[3]}\n"
-            f"Estado: {estado_ga}"
-        )
-        self.txt_metricas.setText(info)
-        self._actualizar_grilla()
+        self.actualizar_grilla()
 
-    def _actualizar_grilla(self):
-        # 1. Limpiar celdas combinadas y contenido previo
-        self.tabla.clearSpans()
-        for r in range(len(self.bloques_info)):
-            for c in range(1, 6):
-                self.tabla.setCellWidget(r, c, None)
-                vacio = QTableWidgetItem("")
-                vacio.setBackground(QColor("#FFFFFF"))
-                self.tabla.setItem(r, c, vacio)
-
-        if not self.horario_actual or not self.horario_actual.genes:
+    def actualizar_grilla(self):
+        self.tree.delete(*self.tree.get_children())
+        if not self.horario_actual:
+            for b in self.BLOQUES:
+                self.tree.insert("", tk.END, values=(b, "", "", "", "", ""))
             return
 
-        filtro_idx = self.combo_filtro.currentIndex() + 1
-        ver_todo = (self.combo_filtro.currentText() == "Ver Todo (Campus Global)")
+        modo = self.modo_vista.get()
+        item = self.combo_item.get()
 
-        # Paleta de colores suaves por nivel (estilo Excel)
-        colores_nivel = {
-            1: ("#E3F2FD", "#1565C0", "#90CAF9"),  # Fondo, Texto, Borde (Azul)
-            2: ("#E8F5E9", "#2E7D32", "#A5D6A7"),  # Verde
-            3: ("#FFF8E1", "#F57F17", "#FFE082"),  # Amarillo/Ámbar
-            4: ("#F3E5F5", "#6A1B9A", "#CE93D8"),  # Púrpura
-            5: ("#FBE9E7", "#D84315", "#FFAB91")   # Naranja/Terracota
-        }
+        if modo == "nivel":
+            nivel = self.combo_item.current() + 1
+            genes = self.horario_actual.obtener_por_nivel(nivel)
+            self.lbl_titulo.config(text=f"Horario Semanal: Nivel {nivel}")
+        elif modo == "docente":
+            genes = self.horario_actual.obtener_por_profesor(item)
+            self.lbl_titulo.config(text=f"Horario Semanal: Docente '{item}'")
+        else:
+            genes = self.horario_actual.obtener_por_sala(item)
+            self.lbl_titulo.config(text=f"Horario Semanal: Sala '{item}'")
 
-        # Agrupar asignaciones por (bloque_inicio, dia)
-        slots = {}
-        for g in self.horario_actual.genes:
-            if not ver_todo and g.nivel != filtro_idx:
-                continue
+        # Mapear asignaciones a matriz [bloque 1..16][dia 1..5]
+        tabla = {b: {d: [] for d in range(1, 6)} for b in range(1, 17)}
+        for g in genes:
+            for b in range(g.bloque, g.bloque + g.duracion):
+                if 1 <= b <= 16 and 1 <= g.dia <= 5:
+                    if modo == "nivel":
+                        txt = f"{g.asignatura[:14]} ({g.sala})"
+                    elif modo == "docente":
+                        txt = f"{g.asignatura[:14]} ({g.sala})"
+                    else:
+                        txt = f"{g.asignatura[:12]} (N{g.nivel})"
+                    tabla[b][g.dia].append(txt)
 
-            dia_col = g.dia  # 1 a 5 -> columnas 1 a 5
-            if not (1 <= dia_col <= 5):
-                continue
-
-            r_inicio = g.bloque - 1  # 0 a 7
-            if not (0 <= r_inicio < len(self.bloques_info)):
-                continue
-
-            key = (r_inicio, dia_col)
-            if key not in slots:
-                slots[key] = []
-            slots[key].append(g)
-
-        # Renderizar asignaciones combinando celdas (setSpan) como en Excel
-        for (r_inicio, c_dia), lista_genes in slots.items():
-            duracion = lista_genes[0].duracion  # 2 bloques de 45 min
-
-            # Combinar las 2 filas de 45 min si cabe en la grilla
-            filas_a_combinar = min(duracion, len(self.bloques_info) - r_inicio)
-            if filas_a_combinar > 1:
-                self.tabla.setSpan(r_inicio, c_dia, filas_a_combinar, 1)
-
-            # Preparar contenido de la tarjeta
-            hay_choque = len(lista_genes) > 1
-            textos = []
-            for g in lista_genes:
-                textos.append(
-                    f"<div style='font-weight: bold; font-size: 11px;'>{g.asignatura}</div>"
-                    f"<div style='font-size: 10px; color: #455A64;'>{g.profesor}</div>"
-                    f"<div style='font-size: 10px; font-weight: bold; color: #1565C0;'>[Sala: {g.sala}]</div>"
-                )
-
-            contenido_html = "<hr style='border: none; border-top: 1px dashed #B0BEC5; margin: 3px 0;'>".join(textos)
-            if hay_choque:
-                contenido_html = "<div style='color: #C62828; font-weight: bold; font-size: 9px;'>⚠️ TOPE DE HORARIO</div>" + contenido_html
-
-            lbl = QLabel(f"<div style='text-align: center; padding: 2px;'>{contenido_html}</div>")
-            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl.setWordWrap(True)
-
-            # Color según nivel o alerta si hay choque
-            nivel_rep = lista_genes[0].nivel
-            bg_color, txt_color, border_color = colores_nivel.get(nivel_rep, ("#FFFFFF", "#000000", "#B0BEC5"))
-            if hay_choque:
-                bg_color = "#FFEBEE"
-                border_color = "#EF5350"
-
-            lbl.setStyleSheet(f"""
-                background-color: {bg_color};
-                border: 1px solid {border_color};
-                border-radius: 3px;
-                margin: 1px;
-            """)
-            self.tabla.setCellWidget(r_inicio, c_dia, lbl)
-
-
-def generar_captura(salida_path="docs/gui_preview.png"):
-    """Renderiza la interfaz offscreen y guarda una captura para el informe."""
-    os.environ["QT_QPA_PLATFORM"] = "offscreen"
-    app = QApplication.instance() or QApplication([])
-    gui = EvoScheduleGUI()
-    gui.ejecutar_greedy()
-    gui.show()
-    os.makedirs(os.path.dirname(salida_path), exist_ok=True)
-    gui.grab().save(salida_path)
-    print(f"Captura de matriz horaria guardada exitosamente en {salida_path}")
+        for b_idx in range(1, 17):
+            b_label = self.BLOQUES[b_idx - 1]
+            fila = [b_label]
+            for d in range(1, 6):
+                asigs = tabla[b_idx][d]
+                fila.append(" / ".join(asigs) if asigs else "")
+            self.tree.insert("", tk.END, values=fila)
 
 
 if __name__ == "__main__":
+    app = EvoScheduleGUI()
     if "--screenshot" in sys.argv:
-        generar_captura()
+        app.ejecutar_baseline()
+        app.update()
+        print("GUI verificada exitosamente.")
+        app.destroy()
     else:
-        app = QApplication(sys.argv)
-        gui = EvoScheduleGUI()
-        gui.show()
-        sys.exit(app.exec())
+        app.mainloop()

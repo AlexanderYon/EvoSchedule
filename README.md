@@ -19,8 +19,8 @@ EvoSchedule/
 │   ├── genetic.py                  # Motor AG: Torneo k=3, Cruce uniforme (1 hijo), Mutación y Elitismo E=2
 │   └── visualizer.py               # Renderizador ASCII de mallas horarias y curvas de convergencia
 ├── app.py                          # Prototipo interactivo por consola (CLI Dashboard)
-├── gui.py                          # Interfaz gráfica de escritorio en PyQt6 estilo planilla Excel
-├── run_experiments.py              # Script maestro que ejecuta el benchmark completo de punta a punta
+├── gui.py                          # Interfaz gráfica en Tkinter (vistas por nivel, docente y sala)
+├── run_experiments.py              # Script de experimentos (5 semillas, análisis de parámetros y baseline)
 ├── requirements.txt                # Dependencias recomendadas del entorno (PyQt6 para GUI)
 └── README.md                       # Orientación y documentación general del proyecto
 ```
@@ -38,11 +38,11 @@ Ejecuta la extracción de datos (EDA), la resolución mediante el **Baseline Vor
 python3 run_experiments.py
 ```
 
-### 2. Ejecutar la Interfaz Gráfica (GUI Estilo Excel)
-Abre la aplicación de escritorio en PyQt6. Muestra la malla horaria en una planilla idéntica a Excel con filas de 45 minutos (Bloques 1 al 16, de 08:10 a 20:00), columnas por día (Lunes a Viernes), celdas combinadas para clases de 2 bloques (90 min) y selector de cohorte por año:
+### 2. Ejecutar la Interfaz Gráfica (Tkinter)
+Abre la aplicación de escritorio en Tkinter. Permite visualizar el horario semanal por nivel formativo, por docente y por sala, mostrando el resumen de restricciones violadas:
 
 ```bash
-python3 gui.py
+python gui.py
 ```
 > *Nota:* Si estás en un servidor sin pantalla gráfica (headless) y quieres regenerar la captura para la documentación:
 > ```bash

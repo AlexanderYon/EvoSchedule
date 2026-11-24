@@ -29,7 +29,8 @@ class AlgoritmoGenetico:
         k_torneo: int = 3, # cantidad de individuos que serán seleccionados en el torneo para evaluar su aptitud
         total_bloques: int = 16, # son 16 bloques de 45 minutos c/u
         dias: int = 5, # asumimos que son clases solo de lunes a viernes
-        seed: int = None
+        seed: int = None,
+        tipo_cruce: str = "uniforme" # "uniforme" o "dos_puntos"
     ):
         self.asignaturas = asignaturas
         self.salas = salas
@@ -42,6 +43,7 @@ class AlgoritmoGenetico:
         self.total_bloques = total_bloques
         self.dias = dias
         self.seed = seed
+        self.tipo_cruce = tipo_cruce
         self.bloques_modulo = list(range(1, self.total_bloques, 2))  # Módulos 1, 3, 5, ..., 15
 
         self.poblacion: List[Horario] = []
@@ -126,6 +128,25 @@ class AlgoritmoGenetico:
 
         return Horario(genes=hijo_genes)
 
+    def cruce_dos_puntos(self, p1: Horario, p2: Horario) -> Horario:
+        """Aplica cruce en dos puntos aleatorios."""
+        if random.random() > self.tasa_cruce:
+            return p1.clonar()
+        n = len(p1.genes)
+        pt1 = random.randint(0, n - 2)
+        pt2 = random.randint(pt1 + 1, n - 1)
+        hijo_genes = [
+            p2.genes[i].clonar() if pt1 <= i <= pt2 else p1.genes[i].clonar()
+            for i in range(n)
+        ]
+        return Horario(genes=hijo_genes)
+
+    def cruzar(self, p1: Horario, p2: Horario) -> Horario:
+        """Aplica el cruce configurado (uniforme o dos puntos)."""
+        if self.tipo_cruce == "dos_puntos":
+            return self.cruce_dos_puntos(p1, p2)
+        return self.cruce_uniforme(p1, p2)
+
     
     # ===========================================================
     #       Introducir mutaciones
@@ -166,12 +187,12 @@ class AlgoritmoGenetico:
             for i in range(min(self.elitismo, len(self.poblacion))):
                 nueva_poblacion.append(self.poblacion[i].clonar())
 
-            # 2. Reproducción: Torneo + Cruce Uniforme (1 hijo) + Mutación
+            # 2. Reproducción: Torneo + Cruce + Mutación
             while len(nueva_poblacion) < self.tam_poblacion:
                 p1 = self.seleccion_torneo()
                 p2 = self.seleccion_torneo()
 
-                hijo = self.cruce_uniforme(p1, p2)
+                hijo = self.cruzar(p1, p2)
                 self.mutar(hijo)
                 self.evaluador.evaluar(hijo)
                 nueva_poblacion.append(hijo)
