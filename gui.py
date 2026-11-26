@@ -32,7 +32,7 @@ class EvoScheduleGUI(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.title("EvoSchedule - Generador de Horarios Universitarios (Avance 2)")
+        self.title("EvoSchedule - Generador de Horarios Universitarios")
         self.geometry("1280x780")
         self.minsize(950, 650)
         self.historial = []
