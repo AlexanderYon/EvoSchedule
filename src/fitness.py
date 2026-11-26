@@ -1,10 +1,10 @@
 """
 Módulo de cálculo de penalizaciones, distancia al origen y función de aptitud (fitness)
-para EvoSchedule, implementando fielmente la formulación matemática de DESC_PROBLEMA.md.
+para EvoSchedule, con la formulación actualizada de DESC_PROBLEMA.md.
 
 Formulación:
-- P(H) = [P_prof, P_asig, P_vent, P_sal] in R^4
-- D(H) = sqrt( sum( w_k * P_k(H)^2 ) )
+- P(H) = [P_prof, P_asig, P_vent, P_sal, P_disp, P_cap, P_tipo, P_pref]
+- D(H) = H + B/(1+B), con H infracciones duras y B penalización blanda.
 - F(H) = 1 / (1 + D(H))
 """
 
@@ -23,9 +23,8 @@ class FitnessEvaluator:
         w_sal: float = 5.0,
     ):
         """
-        Pesos del vector w = (w_prof, w_asig, w_vent, w_sal).
-        Las restricciones duras (profesor, nivel y sala) tienen mayor ponderación.
-        La restricción blanda (ventanas libres) tiene una ponderación menor.
+        Se conserva la firma anterior por compatibilidad. Los pesos duros
+        anteriores ya no se usan: ahora cada infracción dura cuenta una unidad.
         """
         self.weights = (w_prof, w_asig, w_vent, w_sal)
 
@@ -33,9 +32,9 @@ class FitnessEvaluator:
     # ===========================================================
     #       Determinar P(H)
     # ===========================================================
-    def evaluar_penalizaciones(self, horario: Horario) -> Tuple[int, int, int, int]:
+    def evaluar_penalizaciones(self, horario: Horario) -> Tuple[int, ...]:
         """
-        Calcula el vector de penalizaciones P(H) = [P_prof, P_asig, P_vent, P_sal].
+        Calcula las ocho penalizaciones del modelo.
         Implementado de manera eficiente mediante agrupaciones indexadas por día y entidad.
         """
         genes = horario.genes
@@ -99,29 +98,36 @@ class FitnessEvaluator:
                         if lista[i].solapa_con(lista[j]):
                             p_sal += 1
 
-        return (p_prof, p_asig, p_vent, p_sal)
+        extras = [self.restricciones_sesion(g) for g in genes]
+        p_disp, p_cap, p_tipo, p_pref = (sum(e[i] for e in extras) for i in range(4))
+        return (p_prof, p_asig, p_vent, p_sal, p_disp, p_cap, p_tipo, p_pref)
+
+    @staticmethod
+    def restricciones_sesion(g):
+        """Disponibilidad, capacidad, tipo de sala y preferencia (en ese orden)."""
+        return (int(g.dia == g.dia_no_disponible), int(g.estudiantes > 65),
+                int(g.requiere_lab and not g.sala.startswith(("LAB-", "LC"))),
+                int((g.bloque <= 8) != g.prefiere_manana))
+
 
 
     # ===========================================================
     #       D(H): Distancia al origen
     # ===========================================================
-    def calcular_distancia(self, penalizaciones: Tuple[int, int, int, int]) -> float:
+    def calcular_distancia(self, penalizaciones: Tuple[int, ...]) -> float:
         """
-        Calcula la distancia cuadrática ponderada al origen:
-        D(H) = sqrt( w · P(H)^⊙2 )
+        Calcula la distancia con prioridad estricta de restricciones duras.
         """
 
         # esta es la fórmula que se definió en el modelo
         w_prof, w_asig, w_vent, w_sal = self.weights
-        p_prof, p_asig, p_vent, p_sal = penalizaciones
+        p_prof, p_asig, p_vent, p_sal, p_disp, p_cap, p_tipo, p_pref = penalizaciones
 
-        suma_cuadratica = (
-            w_prof * (p_prof ** 2)
-            + w_asig * (p_asig ** 2)
-            + w_vent * (p_vent ** 2)
-            + w_sal * (p_sal ** 2)
-        )
-        return math.sqrt(suma_cuadratica)
+        # Prioridad estricta: la parte blanda está acotada a [0, 1).
+        # Cada violación dura aumenta la distancia al menos una unidad.
+        duros = p_prof + p_asig + p_sal + p_disp + p_cap + p_tipo
+        blando = math.sqrt(w_vent * p_vent ** 2 + 0.05 * p_pref ** 2)
+        return duros + blando / (1 + blando)
 
 
     # ===========================================================

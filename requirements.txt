@@ -1,9 +1,3 @@
-# EvoSchedule: Optimización de Horarios Universitarios mediante Algoritmos Genéticos
-# Dependencias recomendadas para ejecución y visualizaciones extendidas
-# El núcleo del proyecto (DataLoader, Fitness, Baseline, Genetic) funciona 100% con biblioteca estándar de Python (>= 3.9)
-
-numpy>=1.20.0
-pandas>=1.3.0
-openpyxl>=3.0.0
-matplotlib>=3.4.0
-streamlit>=1.25.0
+# Tkinter se incluye normalmente con Python (Linux: python3-tk).
+deap>=1.4,<2
+matplotlib>=3.4

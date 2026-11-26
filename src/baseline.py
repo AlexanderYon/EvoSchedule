@@ -31,7 +31,11 @@ class GreedyBaseline:
         genes: List[Asignacion] = []
         bloques_inicio = list(range(1, self.total_bloques, 2))  # Módulos estándar de 2 bloques (1, 3, 5, ..., 15)
 
-        for asig in self.asignaturas:
+        # Dificultad de asignación (no dificultad académica): laboratorios, carga docente y duración.
+        from collections import Counter
+        carga = Counter(a["profesor"] for a in self.asignaturas)
+        orden = sorted(self.asignaturas, key=lambda a: (a.get("requiere_lab", False), carga[a["profesor"]], a.get("duracion", 2)), reverse=True)
+        for asig in orden:
             duracion = asig.get("duracion", 2)
             mejor_slot = None
             menor_costo = float("inf")
@@ -58,6 +62,7 @@ class GreedyBaseline:
                     for sala in self.salas:
                         temp = Asignacion(
                             id_asig=asig["id"],
+                            estudiantes=asig.get("estudiantes", 40), requiere_lab=asig.get("requiere_lab", False), dia_no_disponible=asig.get("dia_no_disponible", 0), prefiere_manana=asig.get("prefiere_manana", True),
                             asignatura=asig["nombre"],
                             profesor=asig["profesor"],
                             nivel=asig["nivel"],
@@ -68,16 +73,17 @@ class GreedyBaseline:
                         )
 
                         # Costo voraz: penalizar choques directos de profesor, nivel y sala
-                        costo = 0.0
+                        costo = 100 * sum(evaluador.restricciones_sesion(temp)[:3])
                         for g in genes:
                             if temp.solapa_con(g):
                                 if g.profesor == temp.profesor:
-                                    costo += evaluador.weights[0] * 10.0
+                                    costo += 100
                                 if g.nivel == temp.nivel:
-                                    costo += evaluador.weights[1] * 10.0
+                                    costo += 100
                                 if g.sala == temp.sala:
-                                    costo += evaluador.weights[3] * 10.0
+                                    costo += 100
 
+                        costo += evaluador.restricciones_sesion(temp)[3]
                         # Penalización leve si se asigna el mismo día para la misma asignatura
                         if dia_sesion_previa is not None and dia == dia_sesion_previa:
                             costo += 5.0
@@ -95,6 +101,7 @@ class GreedyBaseline:
             dia_asig, bloque_asig, sala_asig = mejor_slot
             genes.append(Asignacion(
                 id_asig=asig["id"],
+                            estudiantes=asig.get("estudiantes", 40), requiere_lab=asig.get("requiere_lab", False), dia_no_disponible=asig.get("dia_no_disponible", 0), prefiere_manana=asig.get("prefiere_manana", True),
                 asignatura=asig["nombre"],
                 profesor=asig["profesor"],
                 nivel=asig["nivel"],
@@ -120,6 +127,7 @@ class GreedyBaseline:
                 "P_asig": p[1],
                 "P_vent": p[2],
                 "P_sal": p[3],
+                "P_disp": p[4], "P_cap": p[5], "P_tipo": p[6], "P_pref": p[7], "duros": horario.duros,
             },
             "horario": horario
         }

@@ -33,7 +33,10 @@ class EvoScheduleGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("EvoSchedule - Generador de Horarios Universitarios (Avance 2)")
-        self.geometry("1100x680")
+        self.geometry("1280x780")
+        self.minsize(950, 650)
+        self.historial = []
+        self.resultados = {}
 
         # Cargar datos
         self.loader = DataLoader()
@@ -56,7 +59,7 @@ class EvoScheduleGUI(tk.Tk):
         ttk.Button(panel_izq, text="▶ Ejecutar Baseline (Greedy)", command=self.ejecutar_baseline).pack(fill=tk.X, pady=3)
         ttk.Button(panel_izq, text="⚡ Ejecutar Algoritmo Genético", command=self.ejecutar_ag).pack(fill=tk.X, pady=3)
 
-        ttk.Separator(panel_izq, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
+        ttk.Separator(panel_izq, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5)
 
         # Filtros de vista
         ttk.Label(panel_izq, text="Modo de Visualización:", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=2)
@@ -92,6 +95,11 @@ class EvoScheduleGUI(tk.Tk):
         self.lbl_vent.pack(anchor="w")
         self.lbl_sal = ttk.Label(panel_izq, text="• Choques Sala (P_sal): --")
         self.lbl_sal.pack(anchor="w")
+        self.lbl_extras = []
+        for nombre in ("Disponibilidad docente", "Capacidad de sala", "Tipo de sala", "Preferencias"):
+            lbl = ttk.Label(panel_izq, text=f"• {nombre}: --")
+            lbl.pack(anchor="w")
+            self.lbl_extras.append((nombre, lbl))
         self.lbl_estado = ttk.Label(panel_izq, text="Estado: Esperando ejecución", foreground="#1565C0")
         self.lbl_estado.pack(anchor="w", pady=(10, 0))
 
@@ -101,9 +109,16 @@ class EvoScheduleGUI(tk.Tk):
 
         self.lbl_titulo = ttk.Label(panel_der, text="Horario Semanal", font=("Segoe UI", 12, "bold"))
         self.lbl_titulo.pack(anchor="w", pady=(0, 5))
+        ttk.Label(panel_der, text="Capacidad: 65 estudiantes por sala | Datos de disponibilidad y matrícula simulados").pack(anchor="w")
+        ttk.Label(panel_der, text="Selecciona una fila para ver los detalles completos.").pack(anchor="w", pady=(0, 5))
+        self.detalle = tk.Text(panel_der, height=6, wrap="word")
+        self.detalle.pack(side=tk.BOTTOM, fill=tk.X)
+        self.detalle.configure(state="disabled")
+        tabla_frame = ttk.Frame(panel_der)
+        tabla_frame.pack(fill=tk.BOTH, expand=True)
 
         columnas = ["bloque"] + [f"dia_{i}" for i in range(1, 6)]
-        self.tree = ttk.Treeview(panel_der, columns=columnas, show="headings", height=16)
+        self.tree = ttk.Treeview(tabla_frame, columns=columnas, show="headings", height=16)
 
         self.tree.heading("bloque", text="Bloque")
         self.tree.column("bloque", width=140, anchor="center")
@@ -111,10 +126,16 @@ class EvoScheduleGUI(tk.Tk):
             self.tree.heading(f"dia_{i}", text=d.upper())
             self.tree.column(f"dia_{i}", width=150, anchor="w")
 
-        scroll_y = ttk.Scrollbar(panel_der, orient=tk.VERTICAL, command=self.tree.yview)
+        scroll_y = ttk.Scrollbar(tabla_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=scroll_y.set)
-        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scroll_x = ttk.Scrollbar(tabla_frame, orient=tk.HORIZONTAL, command=self.tree.xview)
+        self.tree.configure(xscrollcommand=scroll_x.set)
+        scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
         scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.tree.tag_configure("conflicto", background="#ffe0df")
+        self.tree.tag_configure("alterno", background="#f0f5fa")
+        self.tree.bind("<<TreeviewSelect>>", self.ver_detalle)
 
         self._actualizar_combo()
 
@@ -140,8 +161,14 @@ class EvoScheduleGUI(tk.Tk):
 
     def ejecutar_ag(self):
         t0 = time.time()
-        ag = AlgoritmoGenetico(self.sesiones, self.salas, self.evaluador, tam_poblacion=80, seed=123)
-        res = ag.evolucionar(num_generaciones=40, verbose=False)
+        # Parámetros fijos del algoritmo genético.
+        pob, gens, mut, seed = 80, 40, 0.05, 123
+        self.lbl_estado.config(text="Ejecutando AG...")
+        self.update_idletasks()
+        ag = AlgoritmoGenetico(self.sesiones, self.salas, self.evaluador, tam_poblacion=pob, seed=seed, tasa_mutacion=mut, tipo_cruce="uniforme")
+        res = ag.evolucionar(num_generaciones=gens, verbose=False)
+        self.historial = res["historial"]
+        self.motor = res["motor"]
         self.horario_actual = res["mejor_individuo"]
         self._mostrar_metricas(time.time() - t0, "Algoritmo Genético")
 
@@ -155,13 +182,16 @@ class EvoScheduleGUI(tk.Tk):
         self.lbl_vent.config(text=f"• Ventanas Libres (P_vent): {p[2]}")
         self.lbl_sal.config(text=f"• Choques Sala (P_sal): {p[3]}")
 
-        duros = p[0] + p[1] + p[3]
+        for (nombre, lbl), valor in zip(self.lbl_extras, p[4:]):
+            lbl.config(text=f"• {nombre}: {valor}")
+        self.resultados[metodo] = (self.horario_actual.clonar(), tiempo)
+        duros = self.horario_actual.duros
         if self.horario_actual.distancia == 0:
             self.lbl_estado.config(text="Estado: Óptimo Global Factible (0 violaciones)", foreground="#2E7D32")
         elif duros == 0:
-            self.lbl_estado.config(text=f"Estado: Factible ({p[2]} ventanas libres)", foreground="#1565C0")
+            self.lbl_estado.config(text=f"Estado: Factible ({p[2]} ventanas)", foreground="#1565C0")
         else:
-            self.lbl_estado.config(text=f"Estado: Subóptimo ({duros} choques duros)", foreground="#C62828")
+            self.lbl_estado.config(text=f"Estado: No factible ({duros} infracciones)", foreground="#C62828")
 
         self.actualizar_grilla()
 
@@ -186,6 +216,7 @@ class EvoScheduleGUI(tk.Tk):
             genes = self.horario_actual.obtener_por_sala(item)
             self.lbl_titulo.config(text=f"Horario Semanal: Sala '{item}'")
 
+        self.genes_visibles = genes
         # Mapear asignaciones a matriz [bloque 1..16][dia 1..5]
         tabla = {b: {d: [] for d in range(1, 6)} for b in range(1, 17)}
         for g in genes:
@@ -205,7 +236,55 @@ class EvoScheduleGUI(tk.Tk):
             for d in range(1, 6):
                 asigs = tabla[b_idx][d]
                 fila.append(" / ".join(asigs) if asigs else "")
-            self.tree.insert("", tk.END, values=fila)
+            conflicto = any(len(tabla[b_idx][d]) > 1 for d in range(1, 6))
+            self.tree.insert("", tk.END, iid=str(b_idx), values=fila, tags=("conflicto" if conflicto else "alterno" if b_idx % 2 == 0 else "",))
+
+    def ver_detalle(self, event=None):
+        if not self.tree.selection() or not self.horario_actual:
+            return
+        b = int(self.tree.selection()[0])
+        lineas = []
+        for g in getattr(self, "genes_visibles", []):
+            if g.bloque <= b < g.bloque + g.duracion:
+                lineas.append(f"{self.DIAS[g.dia-1]}: {g.asignatura} | {g.profesor} | {g.sala} | {g.estudiantes}/65 estudiantes")
+        self.detalle.configure(state="normal")
+        self.detalle.delete("1.0", tk.END)
+        self.detalle.insert("1.0", "\n".join(lineas) or "Sin clases en este bloque.")
+        self.detalle.configure(state="disabled")
+
+    def ver_convergencia(self):
+        if not self.historial:
+            messagebox.showinfo("Convergencia", "Ejecuta primero el algoritmo genético.")
+            return
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+        ventana = tk.Toplevel(self)
+        ventana.title(f"Convergencia - {self.motor}")
+        fig = Figure(figsize=(7, 4), dpi=100)
+        ax = fig.add_subplot(111)
+        ax.plot([r["generacion"] for r in self.historial], [r["mejor_fitness"] for r in self.historial], label="Mejor")
+        ax.plot([r["generacion"] for r in self.historial], [r["promedio_fitness"] for r in self.historial], label="Promedio")
+        ax.set(xlabel="Generación", ylabel="Fitness", title="Evolución del algoritmo genético")
+        ax.legend(); ax.grid(alpha=.25); fig.tight_layout()
+        canvas = FigureCanvasTkAgg(fig, master=ventana)
+        canvas.draw(); canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    def comparar(self):
+        if len(self.resultados) < 2:
+            messagebox.showinfo("Comparación", "Ejecuta ambos métodos primero.")
+            return
+        ventana = tk.Toplevel(self)
+        ventana.title("Comparación AG vs Greedy")
+        tree = ttk.Treeview(ventana, columns=("metrica", "greedy", "ag"), show="headings", height=13)
+        for col, titulo in zip(("metrica", "greedy", "ag"), ("Métrica", "Greedy", "AG")):
+            tree.heading(col, text=titulo)
+        g, tg = self.resultados["Baseline Voraz"]
+        a, ta = self.resultados["Algoritmo Genético"]
+        filas = [("Fitness", f"{g.fitness:.6f}", f"{a.fitness:.6f}"), ("Tiempo (s)", f"{tg:.3f}", f"{ta:.3f}"), ("Infracciones duras", g.duros, a.duros)]
+        filas += list(zip(("Choques docentes", "Choques nivel", "Ventanas", "Choques sala", "Disponibilidad", "Capacidad", "Tipo de sala", "Preferencias"), g.penalizaciones, a.penalizaciones))
+        for fila in filas:
+            tree.insert("", tk.END, values=fila)
+        tree.pack(fill=tk.BOTH, expand=True)
 
 
 if __name__ == "__main__":

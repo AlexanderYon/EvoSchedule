@@ -97,10 +97,10 @@ class EvoScheduleApp:
         p_gr = res['penalizaciones']
         if res['distancia'] == 0:
             estado_gr = "ÓPTIMO GLOBAL FACTIBLE (0 violaciones)"
-        elif p_gr['P_prof'] == 0 and p_gr['P_asig'] == 0 and p_gr['P_sal'] == 0:
+        elif p_gr['duros'] == 0:
             estado_gr = f"FACTIBLE SUBÓPTIMO (0 choques duros, {p_gr['P_vent']} ventanas)"
         else:
-            estado_gr = f"APROXIMACIÓN CON CONFLICTOS ({p_gr['P_prof']+p_gr['P_asig']+p_gr['P_sal']} choques duros)"
+            estado_gr = f"APROXIMACIÓN CON CONFLICTOS ({p_gr['duros']} choques duros)"
 
         print(f"\nResultados Algoritmo Voraz (Greedy):")
         print(f" - Tiempo de ejecución: {res['tiempo_segundos']:.4f} segundos")
@@ -110,6 +110,7 @@ class EvoScheduleApp:
         print(f" - Choques Nivel:       {p_gr['P_asig']}")
         print(f" - Ventanas Libres:     {p_gr['P_vent']}")
         print(f" - Choques de Sala:     {p_gr['P_sal']}")
+        print(f" - Disponibilidad/capacidad/tipo/preferencias: {[p_gr[k] for k in ('P_disp','P_cap','P_tipo','P_pref')]}")
         print(f" - Estado del Horario:  {estado_gr}")
         input("\nPresione Enter para volver al menú...")
 
@@ -173,12 +174,13 @@ class EvoScheduleApp:
         print(f" • Distancia D(H):      {self.mejor_horario.distancia:.2f}")
         print(f" • Penalizaciones:     P_prof={p[0]}, P_asig={p[1]}, P_vent={p[2]}, P_sal={p[3]}")
 
+        print(f" • Disponibilidad/capacidad/tipo/preferencias: {p[4:]}")
         if self.mejor_horario.distancia == 0:
             estado_ga = "ÓPTIMO GLOBAL FACTIBLE (0 violaciones)"
-        elif p[0] == 0 and p[1] == 0 and p[3] == 0:
+        elif self.mejor_horario.duros == 0:
             estado_ga = f"FACTIBLE SUBÓPTIMO (0 choques duros, {p[2]} ventanas)"
         else:
-            estado_ga = f"APROXIMACIÓN HEURÍSTICA ({p[0]+p[1]+p[3]} choques duros residuales)"
+            estado_ga = f"APROXIMACIÓN HEURÍSTICA ({self.mejor_horario.duros} choques duros residuales)"
         print(f" • Estado del Horario:  {estado_ga}")
         input("\nPresione Enter para volver al menú...")
 
@@ -246,6 +248,7 @@ class EvoScheduleApp:
                     "p_asig": self.mejor_horario.penalizaciones[1],
                     "p_vent": self.mejor_horario.penalizaciones[2],
                     "p_sal": self.mejor_horario.penalizaciones[3],
+                    "p_disp": self.mejor_horario.penalizaciones[4], "p_cap": self.mejor_horario.penalizaciones[5], "p_tipo": self.mejor_horario.penalizaciones[6], "p_pref": self.mejor_horario.penalizaciones[7],
                 },
                 "total_asignaturas": len(datos_export),
                 "horario": datos_export

@@ -105,3 +105,6 @@ F(H) = \frac{1}{1 + D(H)}
 $$
 
 Esta función $F(H) \in (0, 1]$ se utilizará para medir qué tan apto es un individuo $H$ para pasar sus genes a la siguiente generación.
+
+### Actualización avance 2
+Se amplía el vector con P_disp (indisponibilidad), P_cap (matrícula superior a 65), P_tipo (laboratorio incompatible), P_pref (preferencia mañana/tarde). Las restricciones duras son P_prof, P_asig, P_sal, P_disp, P_cap y P_tipo. La distancia anterior se reemplaza por D = H + B/(1+B), con H igual a la suma de las infracciones duras y B = sqrt(0.05 P_vent² + 0.05 P_pref²). Se conserva F = 1/(1+D). Esta prioridad garantiza que el número de infracciones duras prevalezca sobre las blandas. Los supuestos sintéticos están documentados en README.md.

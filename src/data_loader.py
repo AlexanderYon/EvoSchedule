@@ -3,14 +3,15 @@ Módulo de carga de datos para EvoSchedule.
 Extrae el catálogo oficial de asignaturas, docentes e infraestructura:
 - 45 asignaturas extraídas del archivo HorarioICI_2026-2.xlsx.
 - Cada asignatura se dicta 2 veces por semana.
-- Cada sesión dura 2 bloques de 45 minutos (90 minutos pedagógicos continuos).
+- Cada sesión dura 2 bloques de 40 minutos (80 minutos pedagógicos continuos).
 - Por consiguiente, el modelo gestiona 90 sesiones semanales (genes).
-- 17 salas físicas disponibles en una jornada de 5 días x 8 bloques (40 bloques).
+- 17 salas físicas disponibles en una jornada de 5 días x 16 bloques (80 bloques).
 """
 
 import zipfile
 import xml.etree.ElementTree as ET
 import re
+import random
 from typing import List, Dict, Any, Tuple
 
 
@@ -123,7 +124,15 @@ class DataLoader:
 
         # Construir las 90 sesiones semanales (2 por asignatura, cada una de 2 bloques)
         self.sesiones = []
+        # Escenario sintético reproducible: no son disponibilidades ni matrículas reales.
+        rng = random.Random(2026)
+        docentes = sorted({a["profesor"] for a in self.asignaturas})
+        perfil = {p: (rng.randint(1, 5), rng.choice([True, False])) for p in docentes}
+        self.capacidades = {s: 65 for s in self.salas}
         for asig in self.asignaturas:
+            estudiantes = rng.randint(30, 65)
+            # Supuesto: una sesión práctica en cursos de programación o talleres.
+            practica = any(x in asig["nombre"].lower() for x in ("programación", "taller", "base de datos", "estructura de datos"))
             for s_idx in (1, 2):
                 self.sesiones.append({
                     "id": f"{asig['id']}_S{s_idx}",
@@ -133,7 +142,11 @@ class DataLoader:
                     "profesor": asig["profesor"],
                     "nivel": asig["nivel"],
                     "nivel_nombre": asig["nivel_nombre"],
-                    "duracion": 2  # 2 bloques pedagógicos de 45 minutos (90 min)
+                    "duracion": 2,
+                    "estudiantes": estudiantes,
+                    "requiere_lab": practica and s_idx == 2,
+                    "dia_no_disponible": perfil[asig["profesor"]][0],
+                    "prefiere_manana": perfil[asig["profesor"]][1]
                 })
 
         return self.sesiones, self.salas

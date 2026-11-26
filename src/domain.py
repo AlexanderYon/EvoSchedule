@@ -25,6 +25,10 @@ class Asignacion:
     dia: int        # 1 a 5 (Lunes a Viernes)
     bloque: int     # 1 a n (Bloque de la jornada académica)
     sala: str       # Identificador del espacio físico asignado
+    estudiantes: int = 40
+    requiere_lab: bool = False
+    dia_no_disponible: int = 0
+    prefiere_manana: bool = True
 
     def solapa_con(self, otra: 'Asignacion') -> bool:
         """Determina si dos asignaciones coinciden en día y se solapan en tiempo."""
@@ -44,7 +48,8 @@ class Asignacion:
             duracion=self.duracion,
             dia=self.dia,
             bloque=self.bloque,
-            sala=self.sala
+            sala=self.sala, estudiantes=self.estudiantes, requiere_lab=self.requiere_lab,
+            dia_no_disponible=self.dia_no_disponible, prefiere_manana=self.prefiere_manana
         )
 
 
@@ -55,9 +60,14 @@ class Horario:
     H = { t_1, t_2, ..., t_m }
     """
     genes: List[Asignacion] = field(default_factory=list)
-    penalizaciones: Optional[Tuple[int, int, int, int]] = None  # (P_prof, P_asig, P_vent, P_sal)
+    penalizaciones: Optional[Tuple[int, ...]] = None  # (prof, nivel, ventanas, sala, disponibilidad, capacidad, tipo, preferencias)
     distancia: float = float('inf')  # D(H)
     fitness: float = 0.0             # F(H)
+
+    @property
+    def duros(self) -> int:
+        p = self.penalizaciones
+        return sum(p[i] for i in (0, 1, 3, 4, 5, 6)) if p else 0
 
     @property
     def num_genes(self) -> int:

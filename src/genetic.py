@@ -11,6 +11,10 @@ Implementa el motor evolutivo para optimizar la asignación de horarios universi
 """
 
 import random
+try:
+    from deap import base, tools
+except ImportError:
+    base = tools = None  # Respaldo original si DEAP no está instalado.
 from typing import List, Dict, Any, Tuple
 from src.domain import Horario, Asignacion
 from src.fitness import FitnessEvaluator
@@ -50,6 +54,11 @@ class AlgoritmoGenetico:
         self.historial: List[Dict[str, Any]] = []
         self.mejor_historico: Horario = None
 
+        self.motor = "DEAP" if tools else "Python (respaldo)"
+        if tools:
+            self.toolbox = base.Toolbox()
+            self.toolbox.register("mate_uniforme", tools.cxUniform, indpb=0.5)
+            self.toolbox.register("mate_dos_puntos", tools.cxTwoPoint)
         if seed is not None:
             random.seed(seed)
 
@@ -65,13 +74,14 @@ class AlgoritmoGenetico:
             duracion = asig.get("duracion", 2)
             
             # asignarle un día, bloque y sala aleatorios
-            dia = random.randint(1, self.dias)
+            dia = random.choice([d for d in range(1, self.dias+1) if d != asig.get("dia_no_disponible", 0)])
             bloque = random.choice(self.bloques_modulo)
-            sala = random.choice(self.salas)
+            sala = random.choice([s for s in self.salas if not asig.get("requiere_lab") or s.startswith(("LAB-", "LC"))] or self.salas)
 
             # agregar esa nueva asignación a la lista de genes (una asignación es un gen)
             genes.append(Asignacion(
                 id_asig=asig["id"],
+                estudiantes=asig.get("estudiantes", 40), requiere_lab=asig.get("requiere_lab", False), dia_no_disponible=asig.get("dia_no_disponible", 0), prefiere_manana=asig.get("prefiere_manana", True),
                 asignatura=asig["nombre"],
                 profesor=asig["profesor"],
                 nivel=asig["nivel"],
@@ -102,6 +112,9 @@ class AlgoritmoGenetico:
     # ===========================================================
     def seleccion_torneo(self) -> Horario:
         """Selecciona un individuo mediante torneo de tamaño k."""
+        if tools:
+            # DEAP selecciona por un objeto fitness comparable; aquí usamos el valor escalar.
+            return tools.selTournament(self.poblacion, 1, tournsize=self.k_torneo)[0]
         candidatos = random.sample(self.poblacion, self.k_torneo)
         candidatos.sort(key=lambda x: x.fitness, reverse=True)
         return candidatos[0]
@@ -119,6 +132,10 @@ class AlgoritmoGenetico:
         if random.random() > self.tasa_cruce:
             return p1.clonar()
 
+        if tools:
+            a, b = p1.clonar(), p2.clonar()
+            self.toolbox.mate_uniforme(a.genes, b.genes)
+            return a
         hijo_genes = []
         for g1, g2 in zip(p1.genes, p2.genes):
             if random.random() < 0.5:
@@ -132,6 +149,10 @@ class AlgoritmoGenetico:
         """Aplica cruce en dos puntos aleatorios."""
         if random.random() > self.tasa_cruce:
             return p1.clonar()
+        if tools and len(p1.genes) >= 2:
+            a, b = p1.clonar(), p2.clonar()
+            self.toolbox.mate_dos_puntos(a.genes, b.genes)
+            return a
         n = len(p1.genes)
         pt1 = random.randint(0, n - 2)
         pt2 = random.randint(pt1 + 1, n - 1)
@@ -163,9 +184,9 @@ class AlgoritmoGenetico:
                 if opcion in ["bloque", "todo"]:
                     gen.bloque = random.choice(self.bloques_modulo)
                 if opcion in ["dia", "todo"]:
-                    gen.dia = random.randint(1, self.dias)
+                    gen.dia = random.choice([d for d in range(1, self.dias+1) if d != gen.dia_no_disponible])
                 if opcion in ["sala", "todo"]:
-                    gen.sala = random.choice(self.salas)
+                    gen.sala = random.choice([s for s in self.salas if not gen.requiere_lab or s.startswith(("LAB-", "LC"))] or self.salas)
 
 
     # ===========================================================
@@ -207,6 +228,7 @@ class AlgoritmoGenetico:
 
         return {
             "mejor_individuo": self.mejor_historico,
+            "motor": self.motor,
             "historial": self.historial,
             "generaciones": num_generaciones,
             "tam_poblacion": self.tam_poblacion,
@@ -233,7 +255,7 @@ class AlgoritmoGenetico:
             "P_prof": p[0],
             "P_asig": p[1],
             "P_vent": p[2],
-            "P_sal": p[3]
+            "P_sal": p[3], "P_disp": p[4], "P_cap": p[5], "P_tipo": p[6], "P_pref": p[7], "duros": p0.duros
         }
         self.historial.append(entry)
 

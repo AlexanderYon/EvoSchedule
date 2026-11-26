@@ -79,6 +79,7 @@ def main():
             "P_asig": p[1],
             "P_vent": p[2],
             "P_sal": p[3],
+            "P_disp": p[4], "P_cap": p[5], "P_tipo": p[6], "P_pref": p[7], "duros": m.duros,
             "historial": res["historial"]
         })
         print(f"  • Semilla {s:>3d} | F(H): {m.fitness:.6f} | D(H): {m.distancia:5.2f} | P=[{p[0]}, {p[1]}, {p[2]}, {p[3]}] | Tiempo: {duracion:.2f} s")
@@ -92,6 +93,9 @@ def main():
         "P_vent": calcular_stats([r["P_vent"] for r in resultados_seeds]),
         "P_sal": calcular_stats([r["P_sal"] for r in resultados_seeds]),
     }
+
+    for k in ("P_disp", "P_cap", "P_tipo", "P_pref", "duros"):
+        stats[k] = calcular_stats([r[k] for r in resultados_seeds])
 
     # 4. Análisis del efecto de parámetros (Población, Mutación y Cruce)
     print("\n[4/4] Análisis del efecto de parámetros:")
@@ -128,6 +132,9 @@ def main():
     print(f"{'Choques Sala (P_sal)':<26} | {p_gr['P_sal']:<18d} | {stats['P_sal'][0]:.1f} ± {stats['P_sal'][1]:.2f}")
     print("=" * 70)
 
+    for k in ("P_disp", "P_cap", "P_tipo", "P_pref", "duros"):
+        print(f"{k:<26} | {p_gr[k]:<18d} | {stats[k][0]:.1f} ± {stats[k][1]:.2f}")
+
     # Curva ASCII de convergencia (Semilla 42)
     curva = [reg["mejor_fitness"] for reg in resultados_seeds[0]["historial"]]
     print("\nCurva de Convergencia del AG (Semilla 42):")
@@ -135,6 +142,8 @@ def main():
 
     # Guardar resultados estructurados
     salida = {
+        "motor": ag.motor,
+        "configuracion": {"poblacion": 80, "generaciones": 40, "mutacion": 0.05, "cruce": "uniforme"},
         "baseline": {
             "tiempo": res_greedy["tiempo_segundos"],
             "fitness": res_greedy["fitness"],
@@ -145,7 +154,7 @@ def main():
             "semillas": semillas,
             "estadisticas": {k: {"media": v[0], "std": v[1]} for k, v in stats.items()},
             "detalle_corridas": [
-                {k: v for k, v in r.items() if k != "historial"} for r in resultados_seeds
+                r for r in resultados_seeds
             ]
         },
         "analisis_parametros": {
@@ -157,6 +166,16 @@ def main():
     with open("logs/avance2_resultados.json", "w", encoding="utf-8") as f:
         json.dump(salida, f, indent=2, ensure_ascii=False)
 
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    for r in resultados_seeds:
+        plt.plot([h["generacion"] for h in r["historial"]], [h["mejor_fitness"] for h in r["historial"]], label=str(r["semilla"]))
+    plt.xlabel("Generación"); plt.ylabel("Fitness"); plt.legend(); plt.tight_layout()
+    plt.savefig("logs/curva_convergencia_5seeds.png"); plt.close()
+    for nombre, valores in salida["analisis_parametros"].items():
+        plt.bar(list(valores), list(valores.values())); plt.ylabel("Fitness"); plt.tight_layout()
+        plt.savefig(f"logs/analisis_{nombre}.png"); plt.close()
     print("\n ✓ Resultados guardados en logs/avance2_resultados.json")
 
 

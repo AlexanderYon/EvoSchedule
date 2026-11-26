@@ -1,107 +1,44 @@
-# EvoSchedule: Planificación de Horarios Universitarios mediante Algoritmos Genéticos
+# EvoSchedule – Diseño de horarios universitarios (Avance 2)
 
-Proyecto de Inteligencia Artificial enfocado en la resolución del **University Course Timetabling Problem (UCTP)** mediante **Algoritmos Genéticos (AG)** y comparado rigurosamente contra un **Baseline Voraz (Greedy)**, aplicado a la carrera de **Ingeniería Civil Informática (ICI)** a partir de datos reales institucionales (`dataset/HorarioICI_2026-2.xlsx`).
+Proyecto Python para Ingeniería Civil en Informática UBB. Compara un algoritmo genético con un baseline voraz sobre el mismo escenario.
 
----
-
-## 📌 Guía de Orientación: ¿Dónde está cada cosa?
-
-```text
-EvoSchedule/
-├── dataset/
-│   └── HorarioICI_2026-2.xlsx      # Catálogo académico real (45 asignaturas, 32 docentes, 17 salas)
-├── src/
-│   ├── __init__.py
-│   ├── data_loader.py              # Parser OpenXML nativo (sin dependencias): extrae 45 asignaturas y 90 sesiones
-│   ├── domain.py                   # Entidades base: Asignacion (Gen) y Horario (Individuo/Cromosoma)
-│   ├── fitness.py                  # Evaluador hash O(m): vector P(H) in R^4, distancia D(H) y fitness F(H)
-│   ├── baseline.py                 # Baseline Oficial: Algoritmo Voraz constructivo (First-Fit / Best-Fit)
-│   ├── genetic.py                  # Motor AG: Torneo k=3, Cruce uniforme (1 hijo), Mutación y Elitismo E=2
-│   └── visualizer.py               # Renderizador ASCII de mallas horarias y curvas de convergencia
-├── app.py                          # Prototipo interactivo por consola (CLI Dashboard)
-├── gui.py                          # Interfaz gráfica en Tkinter (vistas por nivel, docente y sala)
-├── run_experiments.py              # Script de experimentos (5 semillas, análisis de parámetros y baseline)
-├── requirements.txt                # Dependencias recomendadas del entorno (PyQt6 para GUI)
-└── README.md                       # Orientación y documentación general del proyecto
-```
-
----
-
-## 🚀 Guía de Ejecución
-
-El núcleo algorítmico (`src/`, `app.py`, `run_experiments.py`) está desarrollado con la **biblioteca estándar de Python (>= 3.9)**, por lo que **no requiere instalar paquetes externos** para ejecutar la optimización y los experimentos.
-
-### 1. Ejecutar el Benchmark Completo de Experimentos
-Ejecuta la extracción de datos (EDA), la resolución mediante el **Baseline Voraz (Greedy)**, la evolución generacional del **Algoritmo Genético**, imprime las tablas comparativas y guarda las trazas en `logs/`:
+## Ejecutar
+Desde la carpeta EvoSchedule, con Python 3.9 o superior:
 
 ```bash
-python3 run_experiments.py
-```
-
-### 2. Ejecutar la Interfaz Gráfica (Tkinter)
-Abre la aplicación de escritorio en Tkinter. Permite visualizar el horario semanal por nivel formativo, por docente y por sala, mostrando el resumen de restricciones violadas:
-
-```bash
+python -m pip install -r requirements.txt
 python gui.py
 ```
-> *Nota:* Si estás en un servidor sin pantalla gráfica (headless) y quieres regenerar la captura para la documentación:
-> ```bash
-> python3 gui.py --screenshot
-> ```
 
-### 3. Iniciar el Dashboard Interactivo por Consola (CLI)
-Permite inspeccionar datos del campus, ejecutar el Baseline Greedy o el AG con parámetros personalizados, ver la grilla por nivel en terminal y exportar a JSON:
+Para reproducir las cinco semillas y las comparaciones de parámetros:
 
 ```bash
-python3 app.py
+python run_experiments.py
 ```
 
----
+También se conserva `python app.py` (consola). En Linux puede ser necesario instalar `python3-tk`. El AG utiliza DEAP para torneo y cruces cuando está instalado; si no está disponible, conserva los operadores Python originales como respaldo. El motor utilizado se registra en el JSON. Para la entrega con DEAP, instalarlo y volver a ejecutar los experimentos.
 
-## 🧠 Modelamiento del Problema
+## Datos y supuestos
+- Fuente: archivo institucional `dataset/HorarioICI_2026-2.xlsx`, planificación ICI UBB. Licencia/autorización no informada; verificar antes de distribuir fuera del curso.
+- Se conservan 45 registros de asignaturas/secciones, 32 docentes registrados, 17 salas, 90 sesiones (dos por registro). No se reconstruye la carga horaria oficial ni se distingue automáticamente la asistencia de secciones paralelas.
+- Cinco días, 16 bloques de 40 minutos por día según la interfaz original. Cada sesión dura dos bloques consecutivos y comienza en un bloque impar.
+- Capacidad uniforme de 65 estudiantes por sala, por decisión del proyecto.
+- Matrícula simulada de 30 a 65 estudiantes por registro; disponibilidad simulada de cuatro días por docente y preferencia mañana/tarde, generadas con `random.Random(2026)` en `src/data_loader.py`. Ambas sesiones del registro comparten matrícula y perfil docente. No son datos reales.
+- Una segunda sesión práctica se supone para registros cuyo nombre contiene programación, taller, base de datos o estructura de datos; se asigna a salas LAB-* o LC*. Es una aproximación, no una clasificación oficial.
 
-El modelo sigue las siguientes especificaciones formales:
+## Modelo
+El cromosoma mantiene una asignación por sesión (día, bloque, sala, docente, nivel y duración), con metadatos de matrícula y perfil. El evaluador devuelve P_prof, P_asig, P_vent, P_sal, P_disp, P_cap, P_tipo, P_pref, en ese orden.
 
-1. **Catálogo de Asignaturas:** 45 asignaturas regulares extraídas de `dataset/HorarioICI_2026-2.xlsx`.
-2. **Sesiones Semanales:** Cada asignatura se dicta **2 veces por semana**, y cada clase dura **2 bloques pedagógicos de 45 minutos** (90 minutos continuos por sesión). Esto resulta en un cromosoma de **$m = 90$ sesiones atómicas** a programar.
-3. **Jornada y Capacidad del Campus:**
-   - 5 días lectivos (Lunes a Viernes).
-   - **16 bloques pedagógicos de 45 minutos** por día: Mañana (B1 a B8, 08:10 a 14:00) y Tarde/Vespertino (B9 a B16, 14:10 a 20:00).
-   - Bloques de inicio válidos para clases de 2 bloques: módulos impares $b \in \{1, 3, 5, 7, 9, 11, 13, 15\}$.
-   - Oferta instalada: $17\text{ salas} \times 16\text{ bloques} \times 5\text{ días} = \mathbf{1,360\text{ casilleros bloque-sala}}$.
-   - Demanda requerida: $90\text{ sesiones} \times 2\text{ bloques} = \mathbf{180\text{ casilleros}}$ ($13.24\%$ de ocupación de campus).
-4. **Espacio de Penalizaciones $P(H) \in \mathbb{R}^4$ y Aptitud:**
-   $$P(H) = \big[ P_{\text{prof}}(H),\, P_{\text{asig}}(H),\, P_{\text{vent}}(H),\, P_{\text{sal}}(H) \big]$$
-   - $P_{\text{prof}}$ (*Dura*): Choque de docente en un mismo día y bloque ($w_1 = 5.0$).
-   - $P_{\text{asig}}$ (*Dura*): Choque de asignaturas del mismo nivel académico ($w_2 = 5.0$).
-   - $P_{\text{vent}}$ (*Blanda*): Ventanas horarias libres entre clases del mismo nivel ($w_3 = 0.05$).
-   - $P_{\text{sal}}$ (*Dura*): Asignaciones simultáneas sobre la misma aula física ($w_4 = 5.0$).
-   - **Distancia al origen y Aptitud:**
-     $$D(H) = \sqrt{\sum w_k P_k(H)^2}, \qquad F(H) = \frac{1}{1 + D(H)} \in (0, 1]$$
+Restricciones duras: choques de profesor, nivel y sala; indisponibilidad docente; matrícula superior a 65; sesión práctica fuera de laboratorio. Blandas: ventanas y preferencias mañana/tarde.
 
----
+Sea H el número total de infracciones duras y B = sqrt(0.05 * ventanas² + 0.05 * preferencias²). La distancia modificada es D = H + B/(1+B); el fitness sigue siendo F = 1/(1+D). La parte blanda es inferior a uno, por lo que un horario factible siempre supera a uno no factible. La distancia y fitness no son directamente comparables con los del avance anterior.
 
-## ⚙️ Arquitectura de los Algoritmos
+Greedy ordena sesiones por necesidad de laboratorio, número de sesiones a cargo del docente y duración, en orden descendente. Esta dificultad es logística, no académica. Prioriza evitar infracciones duras, luego preferencias y días distintos de una misma asignatura. El AG mantiene población aleatoria, torneo, cruce uniforme o de dos puntos, mutación y elitismo; genera y muta días y salas compatibles cuando existen.
 
-### 1. Baseline Oficial: Algoritmo Voraz (Greedy)
-- Enfoque constructivo secuencial determinista.
-- Asigna cada una de las 90 sesiones en el casillero (día, bloque, sala) de menor costo inmediato.
-- Incorpora alternancia de días para sesiones gemelas de una misma asignatura (ej. Lunes y Miércoles).
-- **Rendimiento:** Encuentra una solución globalmente factible ($D=0.00, F=1.000000$) con cero choques en apenas **$0.088$ segundos**.
+## Interfaz y experimentos
+La interfaz permite ejecutar ambos métodos, consultar horarios por nivel/docente/sala y seleccionar una fila para ver nombres completos y matrícula. El AG usa parámetros fijos en la interfaz: población 80, 40 generaciones, mutación 0.05, semilla 123 y cruce uniforme. Los gráficos y comparaciones se generan mediante run_experiments.py. Una fila rosada indica coincidencias en la vista seleccionada; el resumen contabiliza todas las infracciones del horario.
 
-### 2. Algoritmo Genético (AG)
-- **Representación:** Cromosoma de $m = 90$ tuplas $t_i = (dia, bloque, duracion=2, profesor, asignatura, sala)$.
-- **Selección de Padres:** Torneo determinista de tamaño $k = 3$.
-- **Cruce Uniforme (1 hijo):** Recorre los 90 genes en paralelo; para cada sesión académica se elige aleatoriamente (50/50) si hereda la asignación horaria del Padre 1 o del Padre 2.
-- **Mutación Estocástica ($p_m = 0.05$):** Modifica aleatoriamente el día, el bloque modular o la sala física asignada a un gen.
-- **Mecanismo de Supervivencia:** **Reemplazo Generacional con Elitismo ($E = 2$)**. Los dos mejores individuos de la generación se clonan directamente a la siguiente población, garantizando que el mejor fitness sea monótonamente no decreciente.
-- **Criterio de Parada:** Cantidad fija de generaciones ($G = 60$), asegurando una cota superior determinista de tiempo de cómputo para evaluaciones comparativas uniformes.
+`run_experiments.py` ejecuta 5 semillas (42, 101, 202, 303, 404), población 80 y 40 generaciones; compara tres parámetros con semilla 123 y 30 generaciones. Guarda resultados y gráficos actualizados en `logs/`. Las comparaciones de parámetros son preliminares (una semilla). No se garantiza que AG supere a Greedy. Los tiempos dependen del equipo.
 
----
-
-## 👥 Integrantes del Equipo
-- **Yonatan Chiuca**
-- **Sebastián Cea**
-- **Sebastian Cádiz**
-
-*Asignatura:* Inteligencia Artificial (ICI 2026-2) -- *Proyecto EvoSchedule*
+## Archivos principales
+`src/domain.py`, `data_loader.py`, `fitness.py`, `baseline.py`, `genetic.py`, `visualizer.py`, `gui.py`, `app.py`, `run_experiments.py`. El informe y anexo IAG deben documentar los supuestos, cambios y resultados; no se incluyen como entregables terminados en este ZIP.
